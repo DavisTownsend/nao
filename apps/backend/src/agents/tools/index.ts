@@ -22,8 +22,11 @@ import list from './list';
 import loadSkill from './load-skill';
 import { createMcpCallTool } from './mcp-call';
 import { createMcpConnectTool } from './mcp-connect';
+import onboardingCommand from './onboarding-command';
+import onboardingProgress from './onboarding-progress';
 import read from './read';
 import readQueryResult from './read-query-result';
+import requestWarehouseCredentials from './request-warehouse-credentials';
 import search from './search';
 import story, { buildStoryToolDescription } from './story';
 import suggestFollowUps from './suggest-follow-ups';
@@ -49,6 +52,9 @@ export const tools = {
 	grep,
 	list,
 	load_skill: loadSkill,
+	onboarding_command: onboardingCommand,
+	onboarding_progress: onboardingProgress,
+	request_warehouse_credentials: requestWarehouseCredentials,
 	read,
 	search,
 	task,
@@ -66,6 +72,7 @@ export const getTools = (
 		mcpEnabled?: boolean;
 		mcpServers?: string[] | null;
 		excludeFollowUps?: boolean;
+		onboarding?: boolean;
 		/**
 		 * Restricts the built-in tools to this allowlist (by tool name). MCP, python,
 		 * sandboxing and clarification tools are dropped entirely. `extraTools` are
@@ -108,6 +115,9 @@ export const getTools = (
 		execute_semantic_query,
 		execute_sql,
 		clarification: clarificationTool,
+		onboarding_command: onboardingCommandTool,
+		onboarding_progress: onboardingProgressTool,
+		request_warehouse_credentials: requestWarehouseCredentialsTool,
 		suggest_follow_ups,
 		task: taskTool,
 		write: writeTool,
@@ -125,6 +135,11 @@ export const getTools = (
 	const allTools = {
 		...baseTools,
 		...(!options.testMode && { clarification: clarificationTool }),
+		...(options.onboarding && {
+			onboarding_command: onboardingCommandTool,
+			onboarding_progress: onboardingProgressTool,
+			request_warehouse_credentials: requestWarehouseCredentialsTool,
+		}),
 		...mcpTools,
 		...(agentSettings?.experimental?.pythonSandboxing && execute_python && { execute_python }),
 		...(agentSettings?.experimental?.sandboxes && execute_sandboxed_code && { execute_sandboxed_code }),

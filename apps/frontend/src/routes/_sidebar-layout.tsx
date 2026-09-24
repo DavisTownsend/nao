@@ -9,6 +9,7 @@ import { SidebarProvider, useSidebar } from '@/contexts/sidebar';
 import { useTheme } from '@/contexts/theme.provider';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { usePermissions } from '@/hooks/use-permissions';
+import { WelcomeRewardPopup } from '@/components/welcome-reward-popup';
 
 export const Route = createFileRoute('/_sidebar-layout')({
 	component: RouteComponent,
@@ -33,6 +34,7 @@ function SidebarLayoutContent() {
 			<Sidebar />
 			<CommandMenu onOpenKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)} />
 			<KeyboardShortcutsDialog open={keyboardShortcutsOpen} onOpenChange={setKeyboardShortcutsOpen} />
+			<WelcomeRewardPopup />
 			<Outlet />
 		</>
 	);

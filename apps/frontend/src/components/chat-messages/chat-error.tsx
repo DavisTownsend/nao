@@ -2,7 +2,7 @@ import { AlertCircleIcon, CheckIcon, CopyIcon, RotateCcwIcon } from 'lucide-reac
 import { Button } from '../ui/button';
 import { useAgentContext, useAgentMessages } from '@/contexts/agent.provider';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { parseBudgetError } from '@/lib/ai';
+import { isFreeMessagesExhaustedError, parseBudgetError } from '@/lib/ai';
 import { cn } from '@/lib/utils';
 
 export interface Props {
@@ -44,7 +44,7 @@ export function ChatError({ className }: Props) {
 	const messages = useAgentMessages();
 	const { isCopied, copy } = useCopyToClipboard();
 
-	if (!error || parseBudgetError(error)) {
+	if (!error || parseBudgetError(error) || isFreeMessagesExhaustedError(error)) {
 		return null;
 	}
 

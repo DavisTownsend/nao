@@ -145,6 +145,22 @@ export const defaultAgentToolsExcluding =
 			semanticLayerMode: toolContext.semanticLayerMode,
 		});
 
+export const onboardingAgentTools: AgentToolsResolver = ({ chat, agentSettings }) =>
+	getTools(
+		agentSettings,
+		{},
+		{
+			testMode: chat.testMode,
+			onboarding: true,
+			builtinToolAllowlist: [
+				'clarification',
+				'onboarding_command',
+				'onboarding_progress',
+				'request_warehouse_credentials',
+			],
+		},
+	);
+
 /**
  * Admin-mode tool set: the same `execute_sql` tool the chat already uses (it
  * runs against nao's own app database when `ToolContext.adminMode` is set),
@@ -494,6 +510,7 @@ class AgentManager {
 			provider?: Provider;
 			timezone?: string;
 			chatUrl?: string;
+			onFinish?: (usage: TokenUsage) => Promise<void> | void;
 		} = {},
 	): ReadableStream<InferUIMessageChunk<UIMessage>> {
 		let error: unknown = undefined;
@@ -571,6 +588,9 @@ class AgentManager {
 						llmProvider: this._modelSelection.provider,
 						llmModelId: this._modelSelection.modelId,
 					});
+					if (tokenUsage) {
+						await opts.onFinish?.(tokenUsage);
+					}
 				} finally {
 					this._finish();
 				}

@@ -476,3 +476,15 @@ export function parseBudgetError(error: Error | undefined): string | null {
 		return null;
 	}
 }
+
+export function isFreeMessagesExhaustedError(error: Error | undefined): boolean {
+	if (!error) {
+		return false;
+	}
+	try {
+		const parsed = JSON.parse(error.message);
+		return parsed.code === 'FREE_MESSAGES_EXHAUSTED' || parsed.error?.code === 'FREE_MESSAGES_EXHAUSTED';
+	} catch {
+		return false;
+	}
+}

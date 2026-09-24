@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Github, Loader2 } from 'lucide-react';
+import type { ImportedProject } from '@/components/settings/import-provider-card';
 
 import {
 	AlertDialog,
@@ -28,9 +29,10 @@ import { trpc } from '@/main';
 interface GitHubRepoPickerProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
+	onImported?: (project: ImportedProject) => void;
 }
 
-export function GitHubRepoPicker({ open, onOpenChange }: GitHubRepoPickerProps) {
+export function GitHubRepoPicker({ open, onOpenChange, onImported }: GitHubRepoPickerProps) {
 	const queryClient = useQueryClient();
 	const [selected, setSelected] = useState<string | null>(null);
 	const [repoToReplace, setRepoToReplace] = useState<{ repoFullName: string; projectName: string } | null>(null);
@@ -47,6 +49,7 @@ export function GitHubRepoPicker({ open, onOpenChange }: GitHubRepoPickerProps) 
 				queryClient.invalidateQueries({ queryKey: trpc.project.getCurrent.queryKey() });
 				queryClient.invalidateQueries({ queryKey: trpc.organization.getProjects.queryKey() });
 				queryClient.invalidateQueries({ queryKey: trpc.github.getProjectGitInfo.queryKey() });
+				onImported?.(data);
 				onOpenChange(false);
 				setRepoToReplace(null);
 				setSelected(null);

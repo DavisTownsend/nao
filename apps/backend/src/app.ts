@@ -68,6 +68,7 @@ import { createContext } from './trpc/trpc';
 import { BudgetExceededError, HandlerError } from './utils/error';
 import { closeBrowser } from './utils/headless-browser';
 import { logger } from './utils/logger';
+import { ensureSystemExampleProject } from './services/example-project';
 
 // Get the directory of the current module (works in both dev and compiled)
 const __filename = fileURLToPath(import.meta.url);
@@ -369,7 +370,7 @@ app.setNotFoundHandler((request, reply) => {
 
 export const startServer = async (opts: { port: number; host: string }) => {
 	if (isCloud) {
-		// TODO: Implement cloud mode
+		await ensureSystemExampleProject();
 	} else {
 		await ensureOrganizationSetup();
 	}

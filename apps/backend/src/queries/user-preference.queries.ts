@@ -69,6 +69,78 @@ export async function mutateUserPreferences(
 	});
 }
 
+export async function grantWelcomeReward(userId: string, remainingTokens: number): Promise<void> {
+	await mutateUserPreferences(userId, (current) => {
+		if (current.welcomeReward) {
+			return current;
+		}
+
+		return {
+			...current,
+			welcomeReward: {
+				remainingTokens,
+				grantedAt: new Date().toISOString(),
+			},
+		};
+	});
+}
+
+export async function claimWelcomeReward(userId: string): Promise<{ show: boolean; remainingTokens: number }> {
+	let show = false;
+
+	const preferences = await mutateUserPreferences(userId, (current) => {
+		if (!current.welcomeReward || current.welcomeReward.seenAt) {
+			return current;
+		}
+
+		show = true;
+
+		return {
+			...current,
+			welcomeReward: {
+				...current.welcomeReward,
+				seenAt: new Date().toISOString(),
+			},
+		};
+	});
+
+	return {
+		show,
+		remainingTokens: preferences.welcomeReward?.remainingTokens ?? 0,
+	};
+}
+
+type WelcomeRewardStatusResult = {
+	status: 'not-granted' | 'consumed' | 'exhausted';
+	remainingTokens: number;
+};
+
+export async function getWelcomeRewardStatus(userId: string): Promise<WelcomeRewardStatusResult> {
+	const reward = (await getUserPreferences(userId)).welcomeReward;
+	const remainingTokens = reward?.remainingTokens ?? 0;
+	const status = !reward ? 'not-granted' : remainingTokens > 0 ? 'consumed' : 'exhausted';
+
+	return { status, remainingTokens };
+}
+
+export async function consumeWelcomeTokens(userId: string, usedTokens: number): Promise<WelcomeRewardStatusResult> {
+	let status: WelcomeRewardStatusResult['status'] = 'not-granted';
+
+	const preferences = await mutateUserPreferences(userId, (current) => {
+		const reward = current.welcomeReward;
+		if (!reward) {
+			return current;
+		}
+
+		const remainingTokens = Math.max(0, reward.remainingTokens - Math.max(0, usedTokens));
+		status = remainingTokens > 0 ? 'consumed' : 'exhausted';
+
+		return { ...current, welcomeReward: { ...reward, remainingTokens } };
+	});
+
+	return { status, remainingTokens: preferences.welcomeReward?.remainingTokens ?? 0 };
+}
+
 const lockForUpdate = <Query extends { execute(): unknown }>(query: Query): Query =>
 	(query as Query & Lockable<Query>).for('update');
 

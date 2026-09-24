@@ -848,3 +848,26 @@ async function loadProjectChatsFacets(args: {
 		},
 	};
 }
+
+export async function upsertSystemExampleProject(projectPath: string): Promise<DBProject> {
+	const [project] = await db
+		.insert(s.project)
+		.values({
+			id: 'system-example-project',
+			orgId: null,
+			name: 'Jaffle Shop',
+			type: 'local',
+			path: projectPath,
+		})
+		.onConflictDoUpdate({
+			target: s.project.id,
+			set: {
+				name: 'Jaffle Shop',
+				path: projectPath,
+			},
+		})
+		.returning()
+		.execute();
+
+	return project;
+}

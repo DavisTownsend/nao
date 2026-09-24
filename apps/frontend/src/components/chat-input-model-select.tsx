@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Settings, TriangleAlert } from 'lucide-react';
@@ -9,6 +10,8 @@ import { SimpleTooltip } from '@/components/ui/tooltip';
 import { usePermissions } from '@/hooks/use-permissions';
 import { isSameModel, useModelSelection } from '@/hooks/use-model-selection';
 import { getShortcutLabel } from '@/lib/keyboard-shortcuts';
+import { trpc } from '@/main';
+import { useAgentContext } from '@/contexts/agent.provider';
 
 /** Listed as an option rather than a link, so that the keyboard reaches it like any other. */
 const MANAGE_MODELS_VALUE = 'manage-models';
@@ -17,6 +20,13 @@ export function ChatInputModelSelect() {
 	const navigate = useNavigate();
 	const { isAdmin } = usePermissions();
 	const { availableModels, selectedModel, setSelectedModel, isPending, canCycleModels } = useModelSelection();
+
+	const preferences = useQuery(trpc.user.getPreferences.queryOptions());
+	const project = useQuery(trpc.project.getCurrent.queryOptions());
+	const remainingTokens = preferences.data?.welcomeReward?.remainingTokens ?? 0;
+	const isTrial = project.data === null && remainingTokens > 0;
+
+	const isOnboarding = useAgentContext().mode === 'onboarding';
 
 	// Set default model when available models load, or reset if current selection is no longer available
 	useEffect(() => {
@@ -52,7 +62,7 @@ export function ChatInputModelSelect() {
 		return null;
 	}
 
-	if (!availableModels?.length) {
+	if (!availableModels?.length && !isOnboarding && !isTrial) {
 		return (
 			<Link
 				to='/settings/project/models'
@@ -78,6 +88,26 @@ export function ChatInputModelSelect() {
 				{selectedModel && <NamedProviderHint provider={selectedModel.provider} />}
 			</>
 		);
+
+		if (isTrial && !isOnboarding) {
+			return (
+				<div className='flex items-center gap-2 text-sm font-normal text-muted-foreground'>
+					{singleModel}
+					<span className='text-sm text-muted-foreground'>
+						Trial · {remainingTokens.toLocaleString()} tokens left
+					</span>
+				</div>
+			);
+		}
+
+		if (isOnboarding) {
+			return (
+				<div className='flex items-center gap-2 text-sm font-normal text-muted-foreground'>
+					{singleModel}
+					<span className='text-sm text-emerald-500/60'>Onboarding Assistant</span>
+				</div>
+			);
+		}
 
 		if (!isAdmin) {
 			return (
@@ -119,7 +149,7 @@ export function ChatInputModelSelect() {
 			</SimpleTooltip>
 
 			<SelectContent align='center' position='popper' side='top' collisionPadding={12}>
-				{availableModels.map((model) => (
+				{availableModels?.map((model) => (
 					<SelectItem key={`${model.provider}-${model.modelId}`} value={`${model.provider}:${model.modelId}`}>
 						<LlmProviderIcon
 							provider={model.provider}

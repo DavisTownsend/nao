@@ -6,7 +6,10 @@ import s from '../src/db/abstractSchema';
 import { db } from '../src/db/db';
 import { getMessagesUsage, getTotalUsage } from '../src/queries/usage.queries';
 import {
+	consumeWelcomeTokens,
 	getUserPreferences,
+	getWelcomeRewardStatus,
+	grantWelcomeReward,
 	mutateUserPreferences,
 	updateUserPreferences,
 } from '../src/queries/user-preference.queries';
@@ -142,6 +145,27 @@ describe('usage query results', () => {
 		});
 		await expect(getUserPreferences(OTHER_USER_ID)).resolves.toEqual({});
 		expect((await getUserPreferences(USER_ID)).projectPreferences?.[OTHER_PROJECT_ID]).toBeUndefined();
+	});
+
+	it('tracks and exhausts welcome reward tokens', async () => {
+		await expect(getWelcomeRewardStatus(USER_ID)).resolves.toEqual({
+			status: 'not-granted',
+			remainingTokens: 0,
+		});
+
+		await grantWelcomeReward(USER_ID, 100);
+		await expect(getWelcomeRewardStatus(USER_ID)).resolves.toEqual({
+			status: 'consumed',
+			remainingTokens: 100,
+		});
+		await expect(consumeWelcomeTokens(USER_ID, 35)).resolves.toEqual({
+			status: 'consumed',
+			remainingTokens: 65,
+		});
+		await expect(consumeWelcomeTokens(USER_ID, 100)).resolves.toEqual({
+			status: 'exhausted',
+			remainingTokens: 0,
+		});
 	});
 
 	it('serializes concurrent project preference transforms', async () => {

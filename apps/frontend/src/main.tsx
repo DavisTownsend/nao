@@ -11,7 +11,7 @@ import { PostHogProvider } from './contexts/posthog.provider';
 import { ThemeProvider } from './contexts/theme.provider';
 import { McpProvider } from './contexts/mcp';
 import { TooltipProvider } from './components/ui/tooltip';
-import { getActiveProjectId } from './lib/active-project';
+import { getProjectRequestHeaders } from './lib/active-project';
 import { routeTree } from './routeTree.gen';
 import reportWebVitals from './reportWebVitals';
 import type { TrpcRouter } from '@nao/backend/trpc';
@@ -55,8 +55,7 @@ export const trpcClient = createTRPCClient<TrpcRouter>({
 			url: '/api/trpc',
 			transformer: superjson,
 			headers() {
-				const activeProjectId = getActiveProjectId();
-				return activeProjectId ? { 'x-nao-project-id': activeProjectId } : {};
+				return getProjectRequestHeaders();
 			},
 		}),
 	],

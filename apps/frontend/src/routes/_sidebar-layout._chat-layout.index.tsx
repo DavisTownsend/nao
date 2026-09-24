@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
-import { PlusIcon, Settings } from 'lucide-react';
+import { ArrowRight, Github, MessageCircle, PlusIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { StoryItem } from '@/lib/stories-page';
 import { buildStoryItems } from '@/lib/stories-page';
@@ -14,8 +14,6 @@ import { usePermissions } from '@/hooks/use-permissions';
 import { useProjectSwitch } from '@/hooks/use-project-switch';
 import { SavedPromptSuggestions } from '@/components/chat-saved-prompt-suggestions';
 import { ChatInput } from '@/components/chat-input';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { MobileHeader } from '@/components/mobile-header';
 import { trpc } from '@/main';
 import { useTheme } from '@/contexts/theme.provider';
@@ -156,26 +154,31 @@ function HomePage() {
 						)}
 					>
 						{showProjectSetupCue ? (
-							<Card className='w-full max-w-xl border shadow-none'>
-								<CardContent className='flex flex-col gap-4 px-5 py-5'>
-									<div className='flex flex-col items-center gap-8 text-left'>
-										<div className='mt-0.5 rounded-full bg-amber-500/10 p-6 text-amber-600 dark:text-amber-400'>
-											<Settings className='size-8' strokeWidth={1.5} />
-										</div>
-										<div className='gap-3 flex flex-col items-center'>
-											<p className='font-medium text-foreground'>
-												Set up a project to start analyzing data
-											</p>
-											<p className='text-sm text-foreground'>
-												Open project settings to connect a project before starting a chat.
-											</p>
-										</div>
-										<Button asChild variant='ghost' className='border rounded-full bg-panel/50'>
-											<Link to='/settings/project'>Get started</Link>
-										</Button>
-									</div>
-								</CardContent>
-							</Card>
+							<>
+								<div className='font-borna relative z-10 text-xl md:text-3xl tracking-tight text-center px-6 mb-6'>
+									Welcome {username ? capitalize(username) : ''}! Let's get started.
+								</div>
+								<div className='relative flex w-full max-w-3xl mx-auto flex-col gap-4'>
+									<img
+										src={logoSrc}
+										alt=''
+										aria-hidden
+										className='pointer-events-none absolute -top-60 left-1/2 -translate-x-1/2 w-full max-w-2xl select-none -z-10'
+									/>
+									<ChatInput variant='example' />
+									<SavedPromptSuggestions />
+								</div>
+								<div className='grid w-full max-w-3xl grid-cols-1 gap-4 px-4 py-6 sm:grid-cols-2'>
+									<HomeLinkCard
+										to='/onboarding'
+										label='Guided setup'
+										title='Set up your nao project'
+										subtitle='Chat with the onboarding agent'
+										tone='green'
+										icon={<MessageCircle className='size-5' />}
+									/>
+								</div>
+							</>
 						) : (
 							<>
 								<div className='font-borna relative z-10 text-xl md:text-3xl tracking-tight text-center px-6 mb-6'>
@@ -231,6 +234,69 @@ function HomePage() {
 				</>
 			)}
 		</div>
+	);
+}
+
+function HomeLinkCard({
+	to,
+	label,
+	title,
+	subtitle,
+	tone,
+	icon,
+}: {
+	to: '/onboarding' | '/setup-github-project';
+	label: string;
+	title: string;
+	subtitle: string;
+	tone: 'green' | 'violet';
+	icon: React.ReactNode;
+}) {
+	const isGreen = tone === 'green';
+
+	return (
+		<Link
+			to={to}
+			className={cn(
+				'group relative flex min-h-28 items-center gap-4 overflow-hidden rounded-xl border p-4 text-left',
+				'transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2',
+				isGreen
+					? 'border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 via-background to-background focus-visible:ring-emerald-500/50'
+					: 'border-violet-500/20 bg-gradient-to-br from-violet-500/10 via-background to-background focus-visible:ring-violet-500/50',
+			)}
+		>
+			<div
+				className={cn(
+					'absolute -right-8 -top-8 size-24 rounded-full blur-2xl transition-opacity group-hover:opacity-100',
+					isGreen ? 'bg-emerald-500/15' : 'bg-violet-500/15',
+				)}
+			/>
+			<div
+				className={cn(
+					'relative flex size-11 shrink-0 items-center justify-center rounded-xl',
+					isGreen
+						? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'
+						: 'bg-violet-500/15 text-violet-600 dark:text-violet-300',
+				)}
+			>
+				{icon}
+			</div>
+			<div className='relative min-w-0 flex-1'>
+				<span
+					className={cn(
+						'mb-1 block text-[10px] font-semibold uppercase tracking-wider',
+						isGreen ? 'text-emerald-600 dark:text-emerald-300' : 'text-violet-600 dark:text-violet-300',
+					)}
+				>
+					{label}
+				</span>
+				<span className='block text-sm font-semibold text-foreground'>{title}</span>
+				<span className='mt-1 block text-xs leading-relaxed text-muted-foreground'>{subtitle}</span>
+			</div>
+			<div className='relative flex size-8 shrink-0 items-center justify-center rounded-full border bg-background/80 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground'>
+				<ArrowRight className='size-4' />
+			</div>
+		</Link>
 	);
 }
 

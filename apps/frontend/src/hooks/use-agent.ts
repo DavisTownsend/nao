@@ -15,7 +15,7 @@ import type { DocumentAttachment } from '@/lib/attachments';
 import type { FileUIPart, InferUIMessageChunk } from 'ai';
 import type { MentionOption } from 'prompt-mentions';
 
-import { getActiveProjectId } from '@/lib/active-project';
+import { getProjectRequestHeaders } from '@/lib/active-project';
 import {
 	checkIsAgentRunning,
 	extractDocumentPathsFromMessage,
@@ -25,6 +25,7 @@ import {
 	getMessageImages,
 	getMessageText,
 	getTextFromUserMessageOrThrow,
+	isFreeMessagesExhaustedError,
 	NEW_CHAT_ID,
 	parseBudgetError,
 	resolveImagesFromMessage,
@@ -39,8 +40,11 @@ import { editedMessageIdStore } from '@/stores/chat-edited-message';
 import { chatInputRestoreStore } from '@/stores/chat-input-restore';
 import { messageQueueStore } from '@/stores/chat-message-queue';
 
+export type AgentMode = 'default' | 'onboarding';
+
 export interface AgentHelpers {
 	chatId: string | undefined;
+	mode: AgentMode;
 	setMessages: UseChatHelpers<UIMessage>['setMessages'];
 	queueOrSendMessage: (args: SendMessageArgs) => Promise<void>;
 	editMessage: (
@@ -88,7 +92,13 @@ interface AgentSendRefs {
 }
 const agentSendRefsStore = new WeakMap<Agent<UIMessage>, AgentSendRefs>();
 
-export const useAgent = ({ disableNavigation = false }: { disableNavigation?: boolean } = {}): AgentState => {
+export const useAgent = ({
+	disableNavigation = false,
+	mode = 'default',
+}: {
+	disableNavigation?: boolean;
+	mode?: AgentMode;
+} = {}): AgentState => {
 	const navigate = useNavigate();
 	const chatId = useChatId();
 	const chat = useChatQuery({ chatId });
@@ -131,7 +141,9 @@ export const useAgent = ({ disableNavigation = false }: { disableNavigation?: bo
 				const newChat = dataPart.data;
 				if (agentId !== newChat.id) {
 					messageQueueStore.moveQueue(agentId, newChat.id);
-					agentService.moveAgent(agentId, newChat.id);
+					if (!disableNavigation) {
+						agentService.moveAgent(agentId, newChat.id);
+					}
 					agentId = newChat.id;
 					continuationChatIdRef.current = newChat.id;
 					setChat({ chatId: newChat.id }, { ...newChat, messages: [] });
@@ -192,9 +204,10 @@ export const useAgent = ({ disableNavigation = false }: { disableNavigation?: bo
 					const adminModeAtSend = activeAdminModeRef.current;
 					agentAdminModeStore.set(newAgent, adminModeAtSend);
 					return {
-						headers: getActiveProjectId() ? { 'x-nao-project-id': getActiveProjectId()! } : undefined,
+						headers: getProjectRequestHeaders(),
 						body: {
 							...body,
+							mode,
 							chatId: agentId === NEW_CHAT_ID ? undefined : agentId,
 							message: {
 								text: getTextFromUserMessageOrThrow(messageToSend),
@@ -202,7 +215,7 @@ export const useAgent = ({ disableNavigation = false }: { disableNavigation?: bo
 								documents: documents.length > 0 ? documents : undefined,
 								citation,
 							},
-							model: activeSelectedModelRef.current ?? undefined,
+							model: mode === 'onboarding' ? undefined : (activeSelectedModelRef.current ?? undefined),
 							mentions: mentions.length > 0 ? mentions : undefined,
 							timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
 							adminMode: adminModeAtSend || undefined,
@@ -228,6 +241,9 @@ export const useAgent = ({ disableNavigation = false }: { disableNavigation?: bo
 						agentService.disposeAgent(agentId);
 					}
 				}
+				void queryClient.invalidateQueries({
+					queryKey: trpc.user.getPreferences.queryKey(),
+				});
 			},
 			onError: () => {
 				messageQueueStore.clear(agentId);
@@ -239,7 +255,7 @@ export const useAgent = ({ disableNavigation = false }: { disableNavigation?: bo
 		}
 
 		return agentService.registerAgent(agentId, newAgent);
-	}, [chatId, disableNavigation, navigate, setChat, queryClient]);
+	}, [chatId, disableNavigation, navigate, setChat, queryClient, mode]);
 
 	agentSendRefsStore.set(agentInstance, { adminModeRef, selectedModelRef, mentionsRef });
 
@@ -268,7 +284,7 @@ export const useAgent = ({ disableNavigation = false }: { disableNavigation?: bo
 	}, [chatId]);
 
 	useEffect(() => {
-		if (!parseBudgetError(error)) {
+		if (!parseBudgetError(error) && !isFreeMessagesExhaustedError(error)) {
 			return;
 		}
 		const lastMsg = messages.at(-1);
@@ -496,6 +512,7 @@ export const useAgent = ({ disableNavigation = false }: { disableNavigation?: bo
 
 	return useMemoObject({
 		chatId,
+		mode,
 		messages,
 		setMessages,
 		queueOrSendMessage,

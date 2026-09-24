@@ -18,6 +18,7 @@ import { env, isCloud, MCP_VALID_AUDIENCES } from './env';
 import { verifyJwtWithLocalJwks } from './mcp/verify-jwt';
 import * as orgQueries from './queries/organization.queries';
 import * as projectQueries from './queries/project.queries';
+import * as userPreferenceQueries from './queries/user-preference.queries';
 import * as userQueries from './queries/user.queries';
 import { emailService } from './services/email';
 import { githubOAuthConfig } from './services/github';
@@ -316,6 +317,7 @@ async function createAuthInstance(baseURL: string) {
 								} else {
 									await orgQueries.initializePersonalOrganization(user.id);
 								}
+								await userPreferenceQueries.grantWelcomeReward(user.id, 50000);
 							} else {
 								await orgQueries.initializeDefaultOrganizationForFirstUser(user.id);
 								if (isSocial) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { areGroupedMessagePartsEqual } from './ai';
+import { areGroupedMessagePartsEqual, isFreeMessagesExhaustedError } from './ai';
 import type { GroupedMessagePart } from '@/types/ai';
 
 const createToolPart = (overrides: Record<string, unknown> = {}): GroupedMessagePart =>
@@ -127,5 +127,24 @@ describe('areGroupedMessagePartsEqual', () => {
 		} as GroupedMessagePart;
 
 		expect(areGroupedMessagePartsEqual(left, right)).toBe(false);
+	});
+});
+
+describe('isFreeMessagesExhaustedError', () => {
+	it('recognizes the structured agent error', () => {
+		const error = new Error(
+			JSON.stringify({
+				error: {
+					code: 'FREE_MESSAGES_EXHAUSTED',
+					message: 'You have used all 5 free example messages',
+				},
+			}),
+		);
+
+		expect(isFreeMessagesExhaustedError(error)).toBe(true);
+	});
+
+	it('ignores unrelated errors', () => {
+		expect(isFreeMessagesExhaustedError(new Error('Connection failed'))).toBe(false);
 	});
 });

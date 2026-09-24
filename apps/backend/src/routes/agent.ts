@@ -5,6 +5,8 @@ import { handleAgentRoute } from '../handlers/agent';
 import { authMiddleware } from '../middleware/auth';
 import * as chatQueries from '../queries/chat.queries';
 import * as projectQueries from '../queries/project.queries';
+import * as userPreferenceQueries from '../queries/user-preference.queries';
+import { getExampleProjectForUser, SYSTEM_EXAMPLE_PROJECT_ID } from '../services/example-project';
 import { posthog, PostHogEvent } from '../services/posthog';
 import { AgentRequestSchema } from '../types/chat';
 
@@ -15,10 +17,43 @@ export const agentRoutes = async (app: App) => {
 
 	app.post('/', { schema: { body: AgentRequestSchema } }, async (request, reply) => {
 		const { user, project, body, headers } = request;
-		const projectId = body.chatId ? await chatQueries.getChatProjectId(body.chatId) : project?.id;
+
+		const isOnboarding = body.mode === 'onboarding';
+
+		const onboardingProject = isOnboarding ? await projectQueries.getProjectById(SYSTEM_EXAMPLE_PROJECT_ID) : null;
+
+		const exampleProject = !isOnboarding && !project ? await getExampleProjectForUser(user.id) : null;
+
+		const projectId = body.chatId
+			? await chatQueries.getChatProjectId(body.chatId)
+			: isOnboarding
+				? onboardingProject?.id
+				: (project?.id ?? exampleProject?.id);
+
+		const isExampleProject = projectId === SYSTEM_EXAMPLE_PROJECT_ID;
 
 		let canChatWithNaoData = false;
-		if (projectId) {
+		if (isOnboarding) {
+			if (!onboardingProject) {
+				return reply.status(503).send({ error: 'Onboarding is unavailable' });
+			}
+			if (projectId !== SYSTEM_EXAMPLE_PROJECT_ID) {
+				return reply.status(403).send({ error: 'Invalid onboarding conversation' });
+			}
+		} else if (isExampleProject) {
+			if (exampleProject?.id !== SYSTEM_EXAMPLE_PROJECT_ID) {
+				return reply.status(403).send({ error: 'Example project access is unavailable' });
+			}
+			const reward = await userPreferenceQueries.getWelcomeRewardStatus(user.id);
+			if (reward.status !== 'consumed') {
+				return reply.status(403).send({
+					error: {
+						code: 'FREE_MESSAGES_EXHAUSTED',
+						message: 'You have used all your free example tokens',
+					},
+				});
+			}
+		} else if (projectId) {
 			const userRole = await projectQueries.getUserRoleInProject(projectId, user.id);
 			if (!userRole || userRole === 'viewer') {
 				return reply.status(403).send({ error: 'Viewers cannot send messages' });
@@ -31,6 +66,12 @@ export const agentRoutes = async (app: App) => {
 			projectId,
 			...body,
 			adminMode: body.adminMode && canChatWithNaoData,
+			onFinish:
+				isExampleProject && !isOnboarding
+					? async (usage) => {
+							await userPreferenceQueries.consumeWelcomeTokens(user.id, usage.totalTokens ?? 0);
+						}
+					: undefined,
 		});
 
 		posthog.capture(user.id, PostHogEvent.MessageSent, {

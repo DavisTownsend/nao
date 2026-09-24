@@ -9,6 +9,7 @@ import {
 	getExecuteSqlPartByQueryIdInChat,
 	updateExecuteSqlPart,
 } from '../../queries/execute-sql.queries';
+import { SYSTEM_EXAMPLE_PROJECT_ID } from '../../services/example-project';
 import { resolveExcludedColumnEnforcement } from '../../services/excluded-columns.service';
 import { runQueryOnLocalFiles } from '../../services/local-query.service';
 import { isWarehouseSqlEnabled } from '../../services/semantic-layer.service';
@@ -35,7 +36,9 @@ export async function executeQuery(
 	if (templateWarnings.length > 0 && sqlIncludesFilterTemplate(effectiveSql)) {
 		throw new Error(`Invalid story filter SQL template: ${templateWarnings.join(' ')}`);
 	}
-	const writePermEnabled = context.agentSettings?.sql?.dangerouslyWritePermEnabled ?? false;
+	const writePermEnabled =
+		context.projectId !== SYSTEM_EXAMPLE_PROJECT_ID &&
+		(context.agentSettings?.sql?.dangerouslyWritePermEnabled ?? false);
 	if (!writePermEnabled && !(await isReadOnlySqlQuery(effectiveSql))) {
 		throw new Error(
 			'Write SQL operations are disabled. Only SELECT queries are allowed. ' +
