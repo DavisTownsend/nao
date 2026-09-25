@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 
 import { isCloud } from '../env';
 import * as projectQueries from '../queries/project.queries';
-import * as userPreferenceQueries from '../queries/user-preference.queries';
 
 export const SYSTEM_EXAMPLE_PROJECT_ID = 'system-example-project';
 
@@ -23,12 +22,9 @@ export async function getExampleProjectForUser(userId: string) {
 		return null;
 	}
 
-	const [preferences, projects] = await Promise.all([
-		userPreferenceQueries.getUserPreferences(userId),
-		projectQueries.listUserProjects(userId),
-	]);
+	const projects = await projectQueries.listUserProjects(userId);
 
-	if (!preferences.welcomeReward || projects.length > 0) {
+	if (projects.length > 0) {
 		return null;
 	}
 

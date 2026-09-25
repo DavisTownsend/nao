@@ -23,8 +23,7 @@ export function ChatInputModelSelect() {
 
 	const preferences = useQuery(trpc.user.getPreferences.queryOptions());
 	const project = useQuery(trpc.project.getCurrent.queryOptions());
-	const remainingTokens = preferences.data?.welcomeReward?.remainingTokens ?? 0;
-	const isTrial = project.data === null && remainingTokens > 0;
+	const isTrial = project.data === null;
 
 	const isOnboarding = useAgentContext().mode === 'onboarding';
 
@@ -93,9 +92,7 @@ export function ChatInputModelSelect() {
 			return (
 				<div className='flex items-center gap-2 text-sm font-normal text-muted-foreground'>
 					{singleModel}
-					<span className='text-sm text-muted-foreground'>
-						Trial · {remainingTokens.toLocaleString()} tokens left
-					</span>
+					<span className='text-sm text-muted-foreground'>Trial</span>
 				</div>
 			);
 		}

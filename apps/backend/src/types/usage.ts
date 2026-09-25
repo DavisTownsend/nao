@@ -82,11 +82,6 @@ export interface UserProjectPreferences {
 
 export interface StoredUserPreferences extends UserPreferences {
 	projectPreferences?: Record<string, UserProjectPreferences>;
-	welcomeReward?: {
-		remainingTokens: number;
-		grantedAt: string;
-		seenAt?: string;
-	};
 }
 
 export function resolveUsagePeriod(

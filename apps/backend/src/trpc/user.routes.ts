@@ -122,8 +122,4 @@ export const userRoutes = {
 	getMemories: protectedProcedure.query(async ({ ctx }) => {
 		return memoryQueries.getUserMemories(ctx.user.id);
 	}),
-
-	claimWelcomeReward: protectedProcedure.mutation(({ ctx }) => {
-		return userPreferenceQueries.claimWelcomeReward(ctx.user.id);
-	}),
 };

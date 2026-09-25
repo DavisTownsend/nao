@@ -1,7 +1,6 @@
-import { useMutation } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { MessageCircleOff } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -9,7 +8,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useAgentContext } from '@/contexts/agent.provider';
 import { useSidebar } from '@/contexts/sidebar';
 import { isFreeMessagesExhaustedError } from '@/lib/ai';
-import { trpc } from '@/main';
 
 const CONFETTI_COLORS = ['bg-blue-500', 'bg-violet-500', 'bg-amber-400', 'bg-emerald-500', 'bg-pink-500'];
 
@@ -36,26 +34,15 @@ function Confetti() {
 
 export function WelcomeRewardPopup() {
 	const [open, setOpen] = useState(false);
-	const [remainingTokens, setRemainingTokens] = useState(0);
-	const requested = useRef(false);
-
-	const claimReward = useMutation(
-		trpc.user.claimWelcomeReward.mutationOptions({
-			onSuccess(data) {
-				if (data.show) {
-					setRemainingTokens(data.remainingTokens);
-					setOpen(true);
-				}
-			},
-		}),
-	);
 
 	useEffect(() => {
-		if (!requested.current) {
-			requested.current = true;
-			claimReward.mutate();
+		if (sessionStorage.getItem('welcome-reward-popup') !== 'true') {
+			return;
 		}
-	}, [claimReward]);
+
+		sessionStorage.removeItem('welcome-reward-popup');
+		setOpen(true);
+	}, []);
 
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>
@@ -63,9 +50,7 @@ export function WelcomeRewardPopup() {
 				<Confetti />
 				<DialogHeader>
 					<DialogTitle>Congrats! 🎉</DialogTitle>
-					<DialogDescription>
-						You've received {remainingTokens.toLocaleString()} free tokens to chat with nao!
-					</DialogDescription>
+					<DialogDescription>You've received free tokens to chat with nao!</DialogDescription>
 				</DialogHeader>
 				<Button onClick={() => setOpen(false)}>Start chatting</Button>
 			</DialogContent>
