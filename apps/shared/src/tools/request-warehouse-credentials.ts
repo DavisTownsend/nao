@@ -1,6 +1,6 @@
 import z from 'zod/v3';
 
-export const ProviderSchema = z.enum([
+export const PROVIDERS = [
 	'athena',
 	'bigquery',
 	'clickhouse',
@@ -15,7 +15,9 @@ export const ProviderSchema = z.enum([
 	'snowflake',
 	'starrocks',
 	'trino',
-]);
+] as const;
+
+export const ProviderSchema = z.enum(PROVIDERS);
 
 export const InputSchema = z.object({
 	provider: ProviderSchema.describe('The lowercase identifier of the warehouse provider selected by the user.'),

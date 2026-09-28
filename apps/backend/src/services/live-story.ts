@@ -21,6 +21,7 @@ import { scheduleSaveLlmInferenceRecord } from '../utils/schedule-task';
 import { backfillMissingQueryData, findMissingQueryIds } from '../utils/story-query-data';
 import { MAX_OUTPUT_TOKENS } from './agent';
 import { resolveExcludedColumnEnforcementForProject } from './excluded-columns.service';
+import { getProjectRuntimeEnvVars } from './project-runtime-env';
 const MAX_RENDERED_ROWS = 60;
 
 interface StoryRefreshTarget {
@@ -53,7 +54,7 @@ export async function executeLiveQuery(
 		throw new Error('Project path not configured');
 	}
 
-	const envVars = await projectQueries.getEnvVars(projectId);
+	const envVars = await getProjectRuntimeEnvVars(projectId);
 	return executeRawSql(sqlQuery, {
 		projectFolder: project.path,
 		projectId,
@@ -98,7 +99,7 @@ export async function refreshStoryData(chatId: string, slug: string): Promise<Re
 				return;
 			}
 
-			const projectEnvVars = await projectQueries.getEnvVars(chat.projectId);
+			const projectEnvVars = await getProjectRuntimeEnvVars(chat.projectId);
 			const result = await executeRawSql(effectiveSql, {
 				projectFolder: project!.path!,
 				projectId: chat.projectId,

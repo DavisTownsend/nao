@@ -13,6 +13,7 @@ import * as projectQueries from '../queries/project.queries';
 import * as storyQueries from '../queries/story.queries';
 import { assertSafeSqlIdentifier } from '../utils/sql-identifiers';
 import { executeRawSql } from './live-story';
+import { getProjectRuntimeEnvVars } from './project-runtime-env';
 
 const FILTER_OPTIONS_LIMIT = 100;
 
@@ -135,7 +136,7 @@ async function loadStoryExecutionContext(chatId: string, storySlug: string) {
 	}
 
 	const [envVars, sqlQueries] = await Promise.all([
-		projectQueries.getEnvVars(projectId),
+		getProjectRuntimeEnvVars(projectId),
 		storyQueries.getSqlQueriesFromCode(chatId, version.code),
 	]);
 	const databaseId = Object.values(sqlQueries).find((query) => query.databaseId)?.databaseId;

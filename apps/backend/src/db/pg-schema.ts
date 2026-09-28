@@ -62,6 +62,7 @@ import {
 } from '../types/messaging-provider';
 import { ORG_ROLES } from '../types/organization';
 import type { StoredUserPreferences } from '../types/usage';
+import type { WarehouseProvider } from '../types/warehouse';
 
 export const user = pgTable('user', {
 	id: text('id').primaryKey(),
@@ -246,6 +247,20 @@ export const projectWhatsappLink = pgTable(
 		index('project_whatsapp_link_userId_idx').on(t.userId),
 	],
 );
+
+export const projectWarehouseCredentials = pgTable('project_warehouse_credentials', {
+	projectId: text('project_id')
+		.notNull()
+		.primaryKey()
+		.references(() => project.id, { onDelete: 'cascade' }),
+	provider: text('provider').$type<WarehouseProvider>().notNull(),
+	encryptedCredentials: text('encrypted_credentials').notNull(),
+	createdAt: timestamp('created_at').defaultNow().notNull(),
+	updatedAt: timestamp('updated_at')
+		.defaultNow()
+		.$onUpdate(() => new Date())
+		.notNull(),
+});
 
 export const chat = pgTable(
 	'chat',

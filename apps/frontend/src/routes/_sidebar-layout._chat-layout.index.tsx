@@ -1,25 +1,27 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
-import { ArrowRight, Github, MessageCircle, PlusIcon } from 'lucide-react';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { ArrowRight, MessageCircle, PlusIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+
 import type { StoryItem } from '@/lib/stories-page';
-import { buildStoryItems } from '@/lib/stories-page';
-import { useSession } from '@/lib/auth-client';
-import { capitalize, cn } from '@/lib/utils';
+
+import { ChatInput } from '@/components/chat-input';
 import { ChatMessages } from '@/components/chat-messages/chat-messages';
+import { SavedPromptSuggestions } from '@/components/chat-saved-prompt-suggestions';
+import { MobileHeader } from '@/components/mobile-header';
 import { ProjectSwitcher } from '@/components/project-selector';
+import { StoryCard } from '@/components/stories-groups';
 import { ViewerHome } from '@/components/viewer-home';
 import { useAgentContext, useAgentMessages } from '@/contexts/agent.provider';
+import { useTheme } from '@/contexts/theme.provider';
+import { useMultiProject } from '@/hooks/use-multi-project';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useProjectSwitch } from '@/hooks/use-project-switch';
-import { SavedPromptSuggestions } from '@/components/chat-saved-prompt-suggestions';
-import { ChatInput } from '@/components/chat-input';
-import { MobileHeader } from '@/components/mobile-header';
-import { trpc } from '@/main';
-import { useTheme } from '@/contexts/theme.provider';
-import { StoryCard } from '@/components/stories-groups';
 import { useResizeObserver } from '@/hooks/use-resize-observer';
-import { useMultiProject } from '@/hooks/use-multi-project';
+import { useSession } from '@/lib/auth-client';
+import { buildStoryItems } from '@/lib/stories-page';
+import { capitalize, cn } from '@/lib/utils';
+import { trpc } from '@/main';
 
 export const Route = createFileRoute('/_sidebar-layout/_chat-layout/')({
 	validateSearch: (search: Record<string, unknown>): { admin?: boolean } => ({

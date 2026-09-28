@@ -40,6 +40,7 @@ from nao_core.semantic_layer import (  # noqa: E402
     metricflow_dialect_for,
     runtime_manifest_path,
 )
+from warehouse_provisioning import prepare_warehouse_config
 
 port = int(os.environ.get("PORT", 8005))
 
@@ -150,6 +151,14 @@ class CompileSemanticQueryResponse(BaseModel):
     database_id: str
     dialect: str
 
+class PrepareWarehouseRequest(BaseModel):
+    project_name: str
+    provider: str
+    credentials: dict[str, object]
+
+class PrepareWarehouseResponse(BaseModel):
+    database_config: dict[str, object]
+    env_vars: dict[str, str]
 
 def _validate_sql(
     sql: str,
@@ -461,5 +470,28 @@ def _resolve_semantic_layer_database(config: NaoConfig, database_name: str | Non
     )
 
 
+@app.post(
+    "/warehouse/prepare",
+    response_model=PrepareWarehouseResponse,
+    dependencies=internal_only,
+)
+async def prepare_warehouse(request: PrepareWarehouseRequest):
+    try:
+        database_config, env_vars = prepare_warehouse_config(
+            request.project_name,
+            request.provider,
+            request.credentials,
+        )
+        return PrepareWarehouseResponse(
+            database_config=database_config,
+            env_vars=env_vars,
+        )
+    except (ValueError, TypeError) as error:
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid warehouse credentials",
+        ) from error
+        
+        
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=port, reload=True)

@@ -59,6 +59,7 @@ import {
 } from '../types/messaging-provider';
 import { ORG_ROLES } from '../types/organization';
 import type { StoredUserPreferences } from '../types/usage';
+import type { WarehouseProvider } from '../types/warehouse';
 
 export const user = sqliteTable('user', {
 	id: text('id').primaryKey(),
@@ -265,6 +266,22 @@ export const projectWhatsappLink = sqliteTable(
 		index('project_whatsapp_link_userId_idx').on(t.userId),
 	],
 );
+
+export const projectWarehouseCredentials = sqliteTable('project_warehouse_credentials', {
+	projectId: text('project_id')
+		.notNull()
+		.primaryKey()
+		.references(() => project.id, { onDelete: 'cascade' }),
+	provider: text('provider').$type<WarehouseProvider>().notNull(),
+	encryptedCredentials: text('encrypted_credentials').notNull(),
+	createdAt: integer('created_at', { mode: 'timestamp_ms' })
+		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+		.notNull(),
+	updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+		.$onUpdate(() => new Date())
+		.notNull(),
+});
 
 export const chat = sqliteTable(
 	'chat',

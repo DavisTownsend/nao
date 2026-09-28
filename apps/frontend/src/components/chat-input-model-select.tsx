@@ -1,17 +1,19 @@
+import { providerLabel, providerName } from '@nao/shared/types';
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Settings, TriangleAlert } from 'lucide-react';
-import { providerLabel, providerName } from '@nao/shared/types';
+import { useCallback, useEffect } from 'react';
+
 import type { LlmProvider } from '@nao/shared/types';
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 import { LlmProviderIcon } from '@/components/ui/llm-provider-icon';
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SimpleTooltip } from '@/components/ui/tooltip';
-import { usePermissions } from '@/hooks/use-permissions';
+import { useAgentContext } from '@/contexts/agent.provider';
 import { isSameModel, useModelSelection } from '@/hooks/use-model-selection';
+import { usePermissions } from '@/hooks/use-permissions';
 import { getShortcutLabel } from '@/lib/keyboard-shortcuts';
 import { trpc } from '@/main';
-import { useAgentContext } from '@/contexts/agent.provider';
 
 /** Listed as an option rather than a link, so that the keyboard reaches it like any other. */
 const MANAGE_MODELS_VALUE = 'manage-models';
@@ -21,7 +23,6 @@ export function ChatInputModelSelect() {
 	const { isAdmin } = usePermissions();
 	const { availableModels, selectedModel, setSelectedModel, isPending, canCycleModels } = useModelSelection();
 
-	const preferences = useQuery(trpc.user.getPreferences.queryOptions());
 	const project = useQuery(trpc.project.getCurrent.queryOptions());
 	const isTrial = project.data === null;
 
