@@ -3,14 +3,14 @@ import { z } from 'zod/v4';
 
 import { isCloudBillingEnabled } from '../env';
 import {
-	createCloudCheckoutForAdmin,
 	createCloudPaymentMethodPortalForAdmin,
 	createCloudPortalForAdmin,
 	createCloudResubscribeForAdmin,
+	createCloudTrialCheckoutForAdmin,
+	createLegacyCloudTrialCheckoutForAdmin,
 	getCloudBillingOrganizationForAdmin,
 	listCloudInvoicesForAdmin,
 	resumeCloudSubscriptionForAdmin,
-	startCloudTrialForAdmin,
 	syncCloudBillingForAdmin,
 } from '../services/billing-management.service';
 import { hasCloudBillingAccess } from '../services/cloud-billing-access.service';
@@ -87,7 +87,7 @@ export const billingRoutes = {
 			trialStartedAt: organization.trialStartedAt,
 			trialEndsAt: organization.trialEndsAt,
 			currentPeriodEndsAt: organization.currentPeriodEndsAt,
-			cancelAtPeriodEnd: organization.cancelAtPeriodEnd,
+			cancellationScheduled: organization.cancellationScheduled,
 			hasDefaultPaymentMethod: organization.hasDefaultPaymentMethod,
 			billingAccessEndsAt: organization.billingAccessEndsAt,
 			canManageBilling: true,
@@ -96,7 +96,7 @@ export const billingRoutes = {
 				organization.trialStartedAt === null &&
 				organization.trialEndsAt === null &&
 				organization.stripeSubscriptionId === null,
-			localTrialActive:
+			legacyTrialWindowActive:
 				organization.billingStatus === 'trialing' &&
 				Boolean(organization.trialEndsAt && organization.trialEndsAt.getTime() > Date.now()) &&
 				!organization.stripeSubscriptionId,
@@ -110,9 +110,9 @@ export const billingRoutes = {
 		};
 	}),
 
-	startTrial: cloudBillingAdminProcedure.mutation(async ({ ctx }) => {
+	createTrialCheckoutSession: cloudBillingAdminProcedure.mutation(async ({ ctx }) => {
 		try {
-			const url = await startCloudTrialForAdmin({
+			const url = await createCloudTrialCheckoutForAdmin({
 				userId: ctx.user.id,
 				organizationId: ctx.organization.id,
 			});
@@ -147,9 +147,9 @@ export const billingRoutes = {
 		}
 	}),
 
-	createCheckoutSession: cloudBillingAdminProcedure.mutation(async ({ ctx }) => {
+	createLegacyTrialCheckoutSession: cloudBillingAdminProcedure.mutation(async ({ ctx }) => {
 		try {
-			const url = await createCloudCheckoutForAdmin({
+			const url = await createLegacyCloudTrialCheckoutForAdmin({
 				userId: ctx.user.id,
 				organizationId: ctx.organization.id,
 			});

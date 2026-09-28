@@ -159,6 +159,25 @@ describe('cloud billing lifecycle', () => {
 		expect(mocks.sendEmail).not.toHaveBeenCalled();
 	});
 
+	it('does not resend a reminder completed for the current trial end', async () => {
+		const trialEndsAt = new Date('2026-09-27T00:00:00.000Z');
+		mocks.getOrganization.mockResolvedValue({
+			id: 'org-id',
+			name: 'Acme',
+			billingStatus: 'trialing',
+			stripeSubscriptionId: 'sub_cloud',
+			trialEndsAt,
+			trialReminderClaimedAt: null,
+			trialReminderSentForTrialEndsAt: trialEndsAt,
+		});
+
+		await sendCloudTrialReminder('org-id', new Date('2026-09-24T00:00:00.000Z'));
+
+		expect(mocks.listAdmins).not.toHaveBeenCalled();
+		expect(mocks.claimReminder).not.toHaveBeenCalled();
+		expect(mocks.sendEmail).not.toHaveBeenCalled();
+	});
+
 	it('releases the reminder when every admin email fails', async () => {
 		const now = new Date('2026-09-24T00:00:00.000Z');
 		const trialEndsAt = new Date('2026-09-27T00:00:00.000Z');

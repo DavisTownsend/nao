@@ -172,12 +172,13 @@ export const organization = pgTable('organization', {
 	stripeSubscriptionId: text('stripe_subscription_id').unique(),
 	stripePriceId: text('stripe_price_id'),
 	currentPeriodEndsAt: timestamp('current_period_ends_at'),
-	cancelAtPeriodEnd: boolean('cancel_at_period_end'),
+	cancellationScheduled: boolean('cancellation_scheduled'),
 	hasDefaultPaymentMethod: boolean('has_default_payment_method'),
 	billingAccessEndsAt: timestamp('billing_access_ends_at'),
 	billingUpdatedAt: timestamp('billing_updated_at'),
 	billingSyncToken: text('billing_sync_token'),
 	trialReminderClaimedAt: timestamp('trial_reminder_claimed_at'),
+	trialReminderSentForTrialEndsAt: timestamp('trial_reminder_sent_for_trial_ends_at'),
 
 	createdAt: timestamp('created_at').defaultNow().notNull(),
 	updatedAt: timestamp('updated_at')

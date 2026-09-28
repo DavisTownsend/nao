@@ -4934,8 +4934,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "cancel_at_period_end": {
-          "name": "cancel_at_period_end",
+        "cancellation_scheduled": {
+          "name": "cancellation_scheduled",
           "type": "boolean",
           "primaryKey": false,
           "notNull": false
@@ -4966,6 +4966,12 @@
         },
         "trial_reminder_claimed_at": {
           "name": "trial_reminder_claimed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trial_reminder_sent_for_trial_ends_at": {
+          "name": "trial_reminder_sent_for_trial_ends_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false

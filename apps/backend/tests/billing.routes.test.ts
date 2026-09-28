@@ -145,7 +145,7 @@ describe('billing.getStatus', () => {
 			hasDefaultPaymentMethod: true,
 			canManageBilling: true,
 			hasStripeSubscription: false,
-			localTrialActive: true,
+			legacyTrialWindowActive: true,
 			trialAvailable: false,
 		});
 	});
@@ -227,7 +227,7 @@ describe('billing.getStatus', () => {
 	});
 });
 
-describe('billing.startTrial', () => {
+describe('billing.createTrialCheckoutSession', () => {
 	beforeEach(() => {
 		testState.billingEnabled = true;
 		testState.membership = membership({});
@@ -241,7 +241,7 @@ describe('billing.startTrial', () => {
 	});
 
 	it('opens a Stripe trial Checkout without granting local access first', async () => {
-		await expect(caller().billing.startTrial()).resolves.toEqual({
+		await expect(caller().billing.createTrialCheckoutSession()).resolves.toEqual({
 			url: 'https://checkout.stripe.com/trial',
 		});
 		expect(stripeMocks.createCheckout).toHaveBeenCalledWith({
@@ -255,7 +255,7 @@ describe('billing.startTrial', () => {
 	it('rejects non-admin members before creating Stripe trial objects', async () => {
 		testState.membership = membership({}, 'member');
 
-		await expect(caller().billing.startTrial()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		await expect(caller().billing.createTrialCheckoutSession()).rejects.toMatchObject({ code: 'FORBIDDEN' });
 		expect(stripeMocks.createCustomer).not.toHaveBeenCalled();
 		expect(stripeMocks.createCheckout).not.toHaveBeenCalled();
 	});
@@ -267,13 +267,13 @@ describe('billing.startTrial', () => {
 			trialEndsAt: new Date('2026-10-08T00:00:00.000Z'),
 		});
 
-		await expect(caller().billing.startTrial()).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+		await expect(caller().billing.createTrialCheckoutSession()).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 		expect(stripeMocks.createCustomer).not.toHaveBeenCalled();
 		expect(stripeMocks.createCheckout).not.toHaveBeenCalled();
 	});
 });
 
-describe('billing.createCheckoutSession', () => {
+describe('billing.createLegacyTrialCheckoutSession', () => {
 	beforeEach(() => {
 		testState.billingEnabled = true;
 		testState.membership = membership({
@@ -292,7 +292,7 @@ describe('billing.createCheckoutSession', () => {
 	});
 
 	it('creates a server-owned cardless Checkout URL for an organization admin', async () => {
-		await expect(caller().billing.createCheckoutSession()).resolves.toEqual({
+		await expect(caller().billing.createLegacyTrialCheckoutSession()).resolves.toEqual({
 			url: 'https://checkout.stripe.com/session',
 		});
 
@@ -311,21 +311,23 @@ describe('billing.createCheckoutSession', () => {
 	it('rejects non-admin members before Stripe work', async () => {
 		testState.membership = membership({}, 'member');
 
-		await expect(caller().billing.createCheckoutSession()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		await expect(caller().billing.createLegacyTrialCheckoutSession()).rejects.toMatchObject({ code: 'FORBIDDEN' });
 		expect(stripeService.createCloudCustomer).not.toHaveBeenCalled();
 	});
 
 	it('requires the organization to start its trial before Checkout', async () => {
 		testState.membership = membership({});
 
-		await expect(caller().billing.createCheckoutSession()).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+		await expect(caller().billing.createLegacyTrialCheckoutSession()).rejects.toMatchObject({
+			code: 'BAD_REQUEST',
+		});
 		expect(stripeService.createCloudCustomer).not.toHaveBeenCalled();
 	});
 
 	it('rejects Checkout when a Stripe subscription already exists', async () => {
 		testState.membership = membership({ stripeSubscriptionId: 'sub_cloud' });
 
-		await expect(caller().billing.createCheckoutSession()).rejects.toMatchObject({ code: 'CONFLICT' });
+		await expect(caller().billing.createLegacyTrialCheckoutSession()).rejects.toMatchObject({ code: 'CONFLICT' });
 		expect(stripeService.createCloudCustomer).not.toHaveBeenCalled();
 	});
 });
@@ -454,7 +456,7 @@ function membership(organization: Record<string, unknown>, role = 'admin') {
 			stripeSubscriptionId: null,
 			stripePriceId: null,
 			currentPeriodEndsAt: null,
-			cancelAtPeriodEnd: null,
+			cancellationScheduled: null,
 			hasDefaultPaymentMethod: null,
 			billingAccessEndsAt: null,
 			billingUpdatedAt: null,

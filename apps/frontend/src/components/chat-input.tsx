@@ -398,7 +398,7 @@ function ChatInputBase({
 
 	if (billingAccess.data?.hasAccess === false) {
 		return (
-			<ChatBillingRequired
+			<ChatCloudAccessRestricted
 				canManageBilling={billingAccess.data.canManageBilling}
 				trialAvailable={billingAccess.data.trialAvailable}
 				className={className}
@@ -509,7 +509,7 @@ function ChatInputBase({
 	);
 }
 
-function ChatBillingRequired({
+function ChatCloudAccessRestricted({
 	canManageBilling,
 	trialAvailable,
 	className,

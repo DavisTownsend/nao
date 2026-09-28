@@ -18,7 +18,7 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 	const [isCheckoutPolling, setIsCheckoutPolling] = useState(
 		search.checkout === 'success' || search.checkout === 'subscribed',
 	);
-	const [isPortalPolling, setIsPortalPolling] = useState(search.portal === 'returned');
+	const [isBillingRefreshPolling, setIsBillingRefreshPolling] = useState(search.portal === 'returned');
 	const billing = useQuery({
 		...trpc.billing.getStatus.queryOptions(),
 		refetchOnWindowFocus: false,
@@ -28,7 +28,7 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 					? isHistoricalBillingStatus(query.state.data?.status)
 					: !query.state.data?.hasStripeSubscription)) ||
 			(query.state.data?.status === 'paused' && isResumeConfirming) ||
-			isPortalPolling
+			isBillingRefreshPolling
 				? 2_000
 				: false,
 	});
@@ -37,15 +37,15 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 		enabled: billing.data?.canManageBilling === true && billing.data.invoiceHistoryAvailable,
 		refetchOnWindowFocus: false,
 	});
-	const startTrial = useMutation(
-		trpc.billing.startTrial.mutationOptions({
+	const trialCheckout = useMutation(
+		trpc.billing.createTrialCheckoutSession.mutationOptions({
 			onSuccess: ({ url }) => {
 				window.location.href = url;
 			},
 		}),
 	);
-	const checkout = useMutation(
-		trpc.billing.createCheckoutSession.mutationOptions({
+	const legacyTrialCheckout = useMutation(
+		trpc.billing.createLegacyTrialCheckoutSession.mutationOptions({
 			onSuccess: ({ url }) => {
 				window.location.href = url;
 			},
@@ -88,7 +88,7 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 					invoices.refetch(),
 					queryClient.invalidateQueries({ queryKey: trpc.billing.getAccess.queryKey() }),
 				]);
-				setIsPortalPolling(false);
+				setIsBillingRefreshPolling(false);
 			},
 		}),
 	);
@@ -97,10 +97,10 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 	const hasStripeSubscription = billing.data?.hasStripeSubscription === true;
 	const status = billing.data?.status ?? null;
 	const isHistoricalSubscription = isHistoricalBillingStatus(status);
-	const isLocalTrialExpired =
-		status === 'trialing' && !hasStripeSubscription && billing.data?.localTrialActive === false;
-	const isLocalTrialPending =
-		status === 'trialing' && !hasStripeSubscription && billing.data?.localTrialActive === true;
+	const isLegacyTrialExpired =
+		status === 'trialing' && !hasStripeSubscription && billing.data?.legacyTrialWindowActive === false;
+	const isLegacyTrialAwaitingCheckout =
+		status === 'trialing' && !hasStripeSubscription && billing.data?.legacyTrialWindowActive === true;
 	const isCheckoutConfirmed =
 		search.checkout === 'subscribed'
 			? hasStripeSubscription && !isHistoricalSubscription
@@ -109,13 +109,13 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 				: false;
 	const statusView = getBillingStatusView(
 		status,
-		billing.data?.cancelAtPeriodEnd ?? false,
+		billing.data?.cancellationScheduled ?? false,
 		billing.data?.hasDefaultPaymentMethod === true,
-		isLocalTrialExpired,
-		isLocalTrialPending,
+		isLegacyTrialExpired,
+		isLegacyTrialAwaitingCheckout,
 	);
 	const isEndingAtPeriodEnd =
-		billing.data?.cancelAtPeriodEnd === true && (status === 'active' || status === 'trialing');
+		billing.data?.cancellationScheduled === true && (status === 'active' || status === 'trialing');
 	const canSyncStripeBilling =
 		billing.data?.canManageBilling === true && billing.data.paymentMethodManagementAvailable;
 	const shouldAutoSyncStripeBilling =
@@ -168,17 +168,17 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 	}, [canSyncStripeBilling, isSyncingBillingWithStripe, syncBillingWithStripe]);
 
 	useEffect(() => {
-		if (!isPortalPolling) {
+		if (!isBillingRefreshPolling) {
 			return;
 		}
-		const timeout = window.setTimeout(() => setIsPortalPolling(false), 60_000);
+		const timeout = window.setTimeout(() => setIsBillingRefreshPolling(false), 60_000);
 		return () => window.clearTimeout(timeout);
-	}, [isPortalPolling]);
+	}, [isBillingRefreshPolling]);
 
 	const checkoutFeedback = getCheckoutFeedback(search.checkout, isCheckoutConfirmed, isCheckoutPolling);
 	const portalFeedback =
 		search.portal === 'returned'
-			? syncStripeBilling.isPending || isPortalPolling
+			? syncStripeBilling.isPending || isBillingRefreshPolling
 				? 'Refreshing billing changes from Stripe…'
 				: 'Billing details refreshed from Stripe.'
 			: null;
@@ -191,8 +191,8 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 		statusView,
 		hasStripeSubscription,
 		isHistoricalSubscription,
-		isLocalTrialExpired,
-		isLocalTrialPending,
+		isLegacyTrialExpired,
+		isLegacyTrialAwaitingCheckout,
 		isEndingAtPeriodEnd,
 		isCheckoutPolling,
 		isCheckoutConfirmationDelayed:
@@ -201,8 +201,8 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 			!isCheckoutPolling,
 		checkoutFeedback,
 		portalFeedback,
-		checkoutError: checkout.isError ? checkout.error.message : null,
-		trialError: startTrial.isError ? startTrial.error.message : null,
+		legacyTrialCheckoutError: legacyTrialCheckout.isError ? legacyTrialCheckout.error.message : null,
+		trialCheckoutError: trialCheckout.isError ? trialCheckout.error.message : null,
 		managementError:
 			resumeSubscription.error?.message ??
 			resubscribe.error?.message ??
@@ -210,21 +210,21 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 			portal.error?.message ??
 			syncStripeBilling.error?.message ??
 			null,
-		isCheckoutPending: checkout.isPending,
-		isTrialPending: startTrial.isPending,
+		isLegacyTrialCheckoutPending: legacyTrialCheckout.isPending,
+		isTrialCheckoutPending: trialCheckout.isPending,
 		isPortalPending: portal.isPending,
 		isPaymentMethodPortalPending: paymentMethodPortal.isPending,
 		isResubscribePending: resubscribe.isPending,
 		isResumePending: resumeSubscription.isPending,
 		isBillingSyncPending: syncStripeBilling.isPending,
-		subscribe: () => checkout.mutate(),
-		startTrial: () => startTrial.mutate(),
+		openLegacyTrialCheckout: () => legacyTrialCheckout.mutate(),
+		openTrialCheckout: () => trialCheckout.mutate(),
 		openPortal: () => portal.mutate({ requestId: crypto.randomUUID() }),
 		openPaymentMethodPortal: () => paymentMethodPortal.mutate({ requestId: crypto.randomUUID() }),
 		resubscribe: () => resubscribe.mutate(),
 		resume: () => resumeSubscription.mutate({ requestId: crypto.randomUUID() }),
 		syncBilling: () => {
-			setIsPortalPolling(true);
+			setIsBillingRefreshPolling(true);
 			syncStripeBilling.mutate();
 		},
 		retryCheckoutConfirmation: () => {

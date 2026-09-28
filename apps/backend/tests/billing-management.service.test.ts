@@ -43,14 +43,14 @@ vi.mock('../src/services/stripe.service', () => ({
 }));
 
 import {
-	createCloudCheckoutForAdmin,
 	createCloudPaymentMethodPortalForAdmin,
 	createCloudPortalForAdmin,
 	createCloudResubscribeForAdmin,
+	createCloudTrialCheckoutForAdmin,
+	createLegacyCloudTrialCheckoutForAdmin,
 	getCloudBillingOrganizationForAdmin,
 	listCloudInvoicesForAdmin,
 	resumeCloudSubscriptionForAdmin,
-	startCloudTrialForAdmin,
 	syncCloudBillingForAdmin,
 } from '../src/services/billing-management.service';
 
@@ -67,8 +67,8 @@ describe('billing management authorization', () => {
 		['billing status', () => getCloudBillingOrganizationForAdmin(adminInput)],
 		['invoices', () => listCloudInvoicesForAdmin(adminInput)],
 		['billing synchronization', () => syncCloudBillingForAdmin(adminInput)],
-		['trial Checkout', () => startCloudTrialForAdmin(adminInput)],
-		['Checkout', () => createCloudCheckoutForAdmin(adminInput)],
+		['trial Checkout', () => createCloudTrialCheckoutForAdmin(adminInput)],
+		['legacy trial Checkout', () => createLegacyCloudTrialCheckoutForAdmin(adminInput)],
 		['Customer Portal', () => createCloudPortalForAdmin(requestInput)],
 		['payment methods', () => createCloudPaymentMethodPortalForAdmin(requestInput)],
 		['resubscription', () => createCloudResubscribeForAdmin(adminInput)],

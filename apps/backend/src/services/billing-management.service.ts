@@ -36,7 +36,7 @@ export async function getCloudBillingOrganizationForAdmin(input: AdminBillingInp
 	return requireAdminOrganization(input);
 }
 
-export async function startCloudTrialForAdmin(input: AdminBillingInput): Promise<string> {
+export async function createCloudTrialCheckoutForAdmin(input: AdminBillingInput): Promise<string> {
 	const organization = await requireAdminOrganization(input);
 	if (
 		organization.billingStatus ||
@@ -72,7 +72,7 @@ export async function syncCloudBillingForAdmin(input: AdminBillingInput): Promis
 	return { synced: true };
 }
 
-export async function createCloudCheckoutForAdmin(input: AdminBillingInput): Promise<string> {
+export async function createLegacyCloudTrialCheckoutForAdmin(input: AdminBillingInput): Promise<string> {
 	const organization = await requireAdminOrganization(input);
 	if (organization.stripeSubscriptionId) {
 		throw new CloudInitialCheckoutUnavailableError('This organization already has a Stripe subscription');

@@ -26,6 +26,7 @@ export async function sendCloudTrialReminder(organizationId: string, now = new D
 		!organization.trialEndsAt ||
 		organization.trialEndsAt.getTime() <= now.getTime() ||
 		organization.trialEndsAt.getTime() > now.getTime() + TRIAL_REMINDER_LEAD_MS ||
+		organization.trialReminderSentForTrialEndsAt?.getTime() === organization.trialEndsAt.getTime() ||
 		(organization.trialReminderClaimedAt && organization.trialReminderClaimedAt > claimableBefore)
 	) {
 		return;

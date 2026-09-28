@@ -12,21 +12,21 @@ export function preservesRemainingTrial(trialEndsAt: Date | null, now = Date.now
 
 export function getBillingStatusView(
 	status: string | null,
-	cancelAtPeriodEnd: boolean,
+	cancellationScheduled: boolean,
 	hasDefaultPaymentMethod: boolean,
-	isLocalTrialExpired: boolean,
-	isLocalTrialPending: boolean,
+	isLegacyTrialExpired: boolean,
+	isLegacyTrialAwaitingCheckout: boolean,
 ): BillingStatusView {
 	switch (status) {
 		case 'trialing':
-			if (isLocalTrialPending) {
+			if (isLegacyTrialAwaitingCheckout) {
 				return {
 					label: 'Trial setup incomplete',
 					description: 'Complete Stripe Checkout before the free trial and access begin.',
 					variant: 'outline',
 				};
 			}
-			if (isLocalTrialExpired) {
+			if (isLegacyTrialExpired) {
 				return {
 					label: 'Trial ended',
 					description: 'Your free trial has ended. Subscribe to restore access.',
@@ -35,7 +35,7 @@ export function getBillingStatusView(
 			}
 			return {
 				label: 'Free trial',
-				description: cancelAtPeriodEnd
+				description: cancellationScheduled
 					? 'Your trial is scheduled to end without renewal.'
 					: hasDefaultPaymentMethod
 						? 'Your free trial is active. Your payment method will be charged when it ends.'
@@ -44,11 +44,11 @@ export function getBillingStatusView(
 			};
 		case 'active':
 			return {
-				label: cancelAtPeriodEnd ? 'Active · not renewing' : 'Active',
-				description: cancelAtPeriodEnd
+				label: cancellationScheduled ? 'Active · not renewing' : 'Active',
+				description: cancellationScheduled
 					? 'Your plan remains active until the end of the current billing period.'
 					: 'Your subscription is active and renews automatically.',
-				variant: cancelAtPeriodEnd ? 'secondary' : 'success',
+				variant: cancellationScheduled ? 'secondary' : 'success',
 			};
 		case 'past_due':
 			return {
@@ -122,8 +122,8 @@ export function isHistoricalBillingStatus(status: string | null | undefined): bo
 	return status === 'canceled' || status === 'incomplete_expired';
 }
 
-export function formatBillingRenewal(status: string | null, cancelAtPeriodEnd: boolean): string {
-	if (cancelAtPeriodEnd && status !== 'canceled') {
+export function formatBillingRenewal(status: string | null, cancellationScheduled: boolean): string {
+	if (cancellationScheduled && status !== 'canceled') {
 		return 'Will not renew';
 	}
 	switch (status) {

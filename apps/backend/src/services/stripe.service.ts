@@ -28,7 +28,7 @@ interface CloudSubscriptionProjection {
 	trialStartedAt: Date | null;
 	trialEndsAt: Date | null;
 	currentPeriodEndsAt: Date | null;
-	cancelAtPeriodEnd: boolean;
+	cancellationScheduled: boolean;
 	hasDefaultPaymentMethod: boolean;
 	billingAccessEndsAt: Date | null;
 }
@@ -36,7 +36,7 @@ interface CloudSubscriptionProjection {
 interface CloudInvoice {
 	id: string;
 	number: string | null;
-	subscriptionType: 'trial' | 'cloud';
+	invoiceKind: 'trial' | 'subscription';
 	status: Stripe.Invoice.Status | null;
 	createdAt: Date;
 	total: number;
@@ -236,7 +236,7 @@ export async function listCloudInvoices(stripeCustomerId: string): Promise<Cloud
 	return invoices.data.map((invoice) => ({
 		id: invoice.id,
 		number: invoice.number,
-		subscriptionType: invoice.billing_reason === 'subscription_create' && invoice.total === 0 ? 'trial' : 'cloud',
+		invoiceKind: invoice.billing_reason === 'subscription_create' && invoice.total === 0 ? 'trial' : 'subscription',
 		status: invoice.status,
 		createdAt: new Date(invoice.created * 1_000),
 		total: invoice.total,
@@ -343,7 +343,7 @@ export async function cloudSubscriptionProjection(
 		trialStartedAt: stripeDate(subscription.trial_start),
 		trialEndsAt,
 		currentPeriodEndsAt,
-		cancelAtPeriodEnd: cancellationScheduled,
+		cancellationScheduled,
 		hasDefaultPaymentMethod,
 		billingAccessEndsAt: cancellationScheduled
 			? (cancellationEndsAt ?? (subscription.status === 'trialing' ? trialEndsAt : currentPeriodEndsAt))

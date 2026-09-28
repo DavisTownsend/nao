@@ -132,10 +132,10 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 		return null;
 	}
 
-	const isLocalTrialActive = billing.data.localTrialActive;
+	const legacyTrialWindowActive = billing.data.legacyTrialWindowActive;
 	const actionDescription = billing.data.trialAvailable
 		? `Continue to Stripe to confirm this organization's ${plan.trialDays}-day free trial. No payment method is required.`
-		: !isLocalTrialActive
+		: !legacyTrialWindowActive
 			? 'Your free trial has ended. Subscribe to restore access; billing starts immediately.'
 			: preservesRemainingTrial(billing.data.trialEndsAt)
 				? 'Complete Stripe Checkout to confirm the free trial. Access begins only after Stripe confirms it.'
@@ -165,7 +165,7 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 						value={
 							billing.data.trialAvailable
 								? `${plan.trialDays} days, starting after Stripe Checkout`
-								: isLocalTrialActive
+								: legacyTrialWindowActive
 									? `Waiting for Stripe Checkout; reserved until ${formatBillingDate(billing.data.trialEndsAt)}`
 									: `Ended ${formatBillingDate(billing.data.trialEndsAt)}`
 						}
@@ -177,12 +177,18 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 					<p className='text-sm text-muted-foreground'>{actionDescription}</p>
 					{billing.data.canManageBilling ? (
 						billing.data.trialAvailable ? (
-							<Button onClick={billingState.startTrial} isLoading={billingState.isTrialPending}>
+							<Button
+								onClick={billingState.openTrialCheckout}
+								isLoading={billingState.isTrialCheckoutPending}
+							>
 								Start 14-day free trial in Stripe
 							</Button>
 						) : (
-							<Button onClick={billingState.subscribe} isLoading={billingState.isCheckoutPending}>
-								{isLocalTrialActive ? 'Finish trial setup in Stripe' : 'Subscribe to nao Cloud'}
+							<Button
+								onClick={billingState.openLegacyTrialCheckout}
+								isLoading={billingState.isLegacyTrialCheckoutPending}
+							>
+								{legacyTrialWindowActive ? 'Finish trial setup in Stripe' : 'Subscribe to nao Cloud'}
 							</Button>
 						)
 					) : (
@@ -190,14 +196,14 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 							Only an organization admin can subscribe or add billing details.
 						</p>
 					)}
-					{billingState.trialError && (
+					{billingState.trialCheckoutError && (
 						<p className='text-sm text-destructive' role='alert'>
-							{billingState.trialError}
+							{billingState.trialCheckoutError}
 						</p>
 					)}
-					{billingState.checkoutError && (
+					{billingState.legacyTrialCheckoutError && (
 						<p className='text-sm text-destructive' role='alert'>
-							{billingState.checkoutError}
+							{billingState.legacyTrialCheckoutError}
 						</p>
 					)}
 				</div>
@@ -211,7 +217,7 @@ function PlanDetailsCard({ billingState }: { billingState: BillingState }) {
 	if (!billing.data || (!hasStripeSubscription && status !== 'trialing')) {
 		return null;
 	}
-	if (billingState.isEndingAtPeriodEnd || billingState.isLocalTrialExpired) {
+	if (billingState.isEndingAtPeriodEnd || billingState.isLegacyTrialExpired) {
 		return null;
 	}
 
@@ -235,7 +241,7 @@ function PlanDetailsCard({ billingState }: { billingState: BillingState }) {
 				</div>
 			)}
 			<dl className='grid gap-3 text-sm sm:grid-cols-2'>
-				{status === 'trialing' && !billingState.isLocalTrialExpired ? (
+				{status === 'trialing' && !billingState.isLegacyTrialExpired ? (
 					<PlanDetail label='Trial ends' value={formatBillingDate(billing.data.trialEndsAt)} />
 				) : isHistoricalSubscription ? (
 					<PlanDetail
@@ -284,7 +290,7 @@ function InvoicesCard({ billingState }: { billingState: BillingState }) {
 										{formatInvoiceLabel(invoice.createdAt)}
 									</p>
 									<Badge variant='secondary'>
-										{invoice.subscriptionType === 'trial' ? 'Trial' : 'Cloud'}
+										{invoice.invoiceKind === 'trial' ? 'Trial' : 'Subscription'}
 									</Badge>
 								</div>
 								<p className='text-sm text-muted-foreground'>

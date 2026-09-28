@@ -1,4 +1,4 @@
-import { and, eq, gt, isNotNull, isNull, lte, or } from 'drizzle-orm';
+import { and, eq, gt, isNotNull, isNull, lte, ne, or } from 'drizzle-orm';
 
 import s, { DBOrganization, DBStripeWebhookEvent, NewStripeWebhookEvent } from '../db/abstractSchema';
 import { db } from '../db/db';
@@ -13,7 +13,7 @@ export interface SubscriptionProjection {
 	trialStartedAt: Date | null;
 	trialEndsAt: Date | null;
 	currentPeriodEndsAt: Date | null;
-	cancelAtPeriodEnd: boolean;
+	cancellationScheduled: boolean;
 	hasDefaultPaymentMethod: boolean;
 	billingAccessEndsAt: Date | null;
 }
@@ -83,6 +83,10 @@ export async function listOrganizationsDueTrialReminder(
 				gt(s.organization.trialEndsAt, now),
 				lte(s.organization.trialEndsAt, dueBefore),
 				or(
+					isNull(s.organization.trialReminderSentForTrialEndsAt),
+					ne(s.organization.trialReminderSentForTrialEndsAt, s.organization.trialEndsAt),
+				),
+				or(
 					isNull(s.organization.trialReminderClaimedAt),
 					lte(s.organization.trialReminderClaimedAt, claimableBefore),
 				),
@@ -107,6 +111,10 @@ export async function claimTrialReminder(
 				isNotNull(s.organization.stripeSubscriptionId),
 				eq(s.organization.trialEndsAt, trialEndsAt),
 				or(
+					isNull(s.organization.trialReminderSentForTrialEndsAt),
+					ne(s.organization.trialReminderSentForTrialEndsAt, s.organization.trialEndsAt),
+				),
+				or(
 					isNull(s.organization.trialReminderClaimedAt),
 					lte(s.organization.trialReminderClaimedAt, claimableBefore),
 				),
@@ -120,7 +128,7 @@ export async function claimTrialReminder(
 export async function completeTrialReminder(orgId: string, trialEndsAt: Date, claimedAt: Date): Promise<void> {
 	await db
 		.update(s.organization)
-		.set({ trialReminderClaimedAt: trialEndsAt })
+		.set({ trialReminderClaimedAt: null, trialReminderSentForTrialEndsAt: trialEndsAt })
 		.where(
 			and(
 				eq(s.organization.id, orgId),

@@ -61,7 +61,7 @@ describe('cloud billing access entitlement', () => {
 				trialEndsAt: recentlyPast,
 				billingAccessEndsAt: recentlyPast,
 				hasDefaultPaymentMethod: true,
-				cancelAtPeriodEnd: true,
+				cancellationScheduled: true,
 			}),
 			false,
 		],
@@ -81,13 +81,13 @@ describe('cloud billing access entitlement', () => {
 		[
 			'scheduled cancellation before access end',
 			true,
-			entitlement('active', { cancelAtPeriodEnd: true, billingAccessEndsAt: future }),
+			entitlement('active', { cancellationScheduled: true, billingAccessEndsAt: future }),
 			true,
 		],
 		[
 			'scheduled cancellation past access end',
 			true,
-			entitlement('active', { cancelAtPeriodEnd: true, billingAccessEndsAt: past }),
+			entitlement('active', { cancellationScheduled: true, billingAccessEndsAt: past }),
 			false,
 		],
 		['past due while Stripe retries', true, entitlement('past_due'), true],
@@ -109,7 +109,7 @@ function entitlement(
 		trialEndsAt: Date;
 		currentPeriodEndsAt: Date;
 		billingAccessEndsAt: Date;
-		cancelAtPeriodEnd: boolean;
+		cancellationScheduled: boolean;
 		hasDefaultPaymentMethod: boolean;
 	}> = {},
 ) {

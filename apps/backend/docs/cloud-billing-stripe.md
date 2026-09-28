@@ -219,12 +219,13 @@ Billing extends the existing `organization` table:
 - `stripeSubscriptionId`
 - `stripePriceId`
 - `currentPeriodEndsAt`
-- `cancelAtPeriodEnd`
+- `cancellationScheduled`
 - `hasDefaultPaymentMethod`
 - `billingAccessEndsAt`
 - `billingUpdatedAt`
 - `billingSyncToken`
 - `trialReminderClaimedAt`
+- `trialReminderSentForTrialEndsAt`
 
 Supported local statuses are `trialing`, `active`, `past_due`, `unpaid`, `canceled`, `paused`, `incomplete`, and `incomplete_expired`.
 
@@ -248,12 +249,13 @@ erDiagram
         string stripeSubscriptionId UK
         string stripePriceId
         datetime currentPeriodEndsAt
-        boolean cancelAtPeriodEnd
+        boolean cancellationScheduled
         boolean hasDefaultPaymentMethod
         datetime billingAccessEndsAt
         datetime billingUpdatedAt
         string billingSyncToken
         datetime trialReminderClaimedAt
+        datetime trialReminderSentForTrialEndsAt
     }
 
     ORG_MEMBER {
@@ -348,10 +350,10 @@ flowchart LR
 
     AccessSummary["billing.getAccess"]
     Status["billing.getStatus"]
-    StartTrial["billing.startTrial"]
+    StartTrial["billing.createTrialCheckoutSession"]
     Invoices["billing.getInvoices"]
     Sync["billing.syncStripeBilling"]
-    Checkout["billing.createCheckoutSession"]
+    Checkout["billing.createLegacyTrialCheckoutSession"]
     Portal["billing.createPortalSession"]
     Payment["billing.createPaymentMethodSession"]
     Resubscribe["billing.createResubscribeSession"]
@@ -390,10 +392,10 @@ flowchart LR
 
 - `billing.getAccess` returns only entitlement, trial, role-action, and billing-action state required by the organization-wide banner.
 - `billing.getStatus` returns the persisted plan, entitlement dates, action availability, and payment-method readiness.
-- `billing.startTrial` creates or reuses a zero-due Stripe Checkout for the organization's one 14-day trial. Access remains restricted until Stripe confirms the subscription.
+- `billing.createTrialCheckoutSession` creates or reuses a zero-due Stripe Checkout for the organization's one 14-day trial. Access remains restricted until Stripe confirms the subscription.
 - `billing.getInvoices` lists up to 100 invoices for the persisted Customer and returns only display fields and hosted document URLs.
 - `billing.syncStripeBilling` retrieves canonical Stripe state and refreshes the local projection.
-- `billing.createCheckoutSession` preserves the remaining trial for organizations that activated a local trial before Checkout-backed activation was introduced.
+- `billing.createLegacyTrialCheckoutSession` preserves the remaining trial for organizations that activated a local trial before Checkout-backed activation was introduced.
 - `billing.createPortalSession` opens the general Customer Portal for an existing subscription.
 - `billing.createPaymentMethodSession` opens a Portal flow restricted to payment-method updates.
 - `billing.createResubscribeSession` allows a new paid Checkout only after a canceled or incomplete-expired subscription.
@@ -404,7 +406,7 @@ flowchart TD
     Operation{"Admin operation"}
 
     Operation -->|getStatus| Status["Read local projection"]
-    Operation -->|startTrial| TrialUnused{"Trial never started<br/>and no subscription?"}
+    Operation -->|createTrialCheckoutSession| TrialUnused{"Trial never started<br/>and no subscription?"}
     TrialUnused -->|No| TrialConflict["BAD_REQUEST"]
     TrialUnused -->|Yes| EnsureTrialCustomer["Create or reuse Customer"]
     EnsureTrialCustomer --> TrialHistory{"Cloud subscription history exists?"}
@@ -418,7 +420,7 @@ flowchart TD
     HasSyncCustomer -->|No| NotSynced["Return synced: false"]
     HasSyncCustomer -->|Yes| SyncCustomer["Reconcile canonical Stripe state"]
 
-    Operation -->|createCheckoutSession| HasSubscription{"Subscription ID exists?"}
+    Operation -->|createLegacyTrialCheckoutSession| HasSubscription{"Subscription ID exists?"}
     HasSubscription -->|Yes| CheckoutConflict["CONFLICT"]
     HasSubscription -->|No| TrialStarted{"Trial was activated?"}
     TrialStarted -->|No| BadRequest
@@ -475,7 +477,7 @@ The success redirect is not proof of payment. The UI polls the persisted project
 sequenceDiagram
     actor Admin
     participant UI as Billing page
-    participant Router as billing.startTrial
+    participant Router as billing.createTrialCheckoutSession
     participant Management as Billing management service
     participant DB as Database
     participant Stripe as Stripe API

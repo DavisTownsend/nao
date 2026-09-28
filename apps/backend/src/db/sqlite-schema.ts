@@ -183,12 +183,13 @@ export const organization = sqliteTable('organization', {
 	stripeSubscriptionId: text('stripe_subscription_id').unique(),
 	stripePriceId: text('stripe_price_id'),
 	currentPeriodEndsAt: integer('current_period_ends_at', { mode: 'timestamp_ms' }),
-	cancelAtPeriodEnd: integer('cancel_at_period_end', { mode: 'boolean' }),
+	cancellationScheduled: integer('cancellation_scheduled', { mode: 'boolean' }),
 	hasDefaultPaymentMethod: integer('has_default_payment_method', { mode: 'boolean' }),
 	billingAccessEndsAt: integer('billing_access_ends_at', { mode: 'timestamp_ms' }),
 	billingUpdatedAt: integer('billing_updated_at', { mode: 'timestamp_ms' }),
 	billingSyncToken: text('billing_sync_token'),
 	trialReminderClaimedAt: integer('trial_reminder_claimed_at', { mode: 'timestamp_ms' }),
+	trialReminderSentForTrialEndsAt: integer('trial_reminder_sent_for_trial_ends_at', { mode: 'timestamp_ms' }),
 
 	createdAt: integer('created_at', { mode: 'timestamp_ms' })
 		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)

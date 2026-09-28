@@ -10,7 +10,7 @@ type CloudBillingEntitlement = {
 	trialEndsAt: Date | null;
 	currentPeriodEndsAt: Date | null;
 	billingAccessEndsAt: Date | null;
-	cancelAtPeriodEnd?: boolean | null;
+	cancellationScheduled?: boolean | null;
 	hasDefaultPaymentMethod?: boolean | null;
 };
 
@@ -38,12 +38,12 @@ export function hasCloudBillingAccess(
 			if (entitlement.stripeSubscriptionId === null) {
 				return false;
 			}
-			return entitlement.hasDefaultPaymentMethod && !entitlement.cancelAtPeriodEnd
+			return entitlement.hasDefaultPaymentMethod && !entitlement.cancellationScheduled
 				? isAfterWithGrace(entitlement.trialEndsAt, now, ACTIVE_RECONCILIATION_GRACE_MS)
 				: isAfter(entitlement.trialEndsAt, now) &&
 						(!entitlement.billingAccessEndsAt || isAfter(entitlement.billingAccessEndsAt, now));
 		case 'active':
-			return entitlement.cancelAtPeriodEnd
+			return entitlement.cancellationScheduled
 				? isAfter(entitlement.billingAccessEndsAt ?? entitlement.currentPeriodEndsAt, now)
 				: isAfterWithGrace(
 						entitlement.currentPeriodEndsAt ?? entitlement.billingAccessEndsAt,

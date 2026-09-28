@@ -6,12 +6,13 @@ ALTER TABLE "organization" ADD COLUMN "stripe_customer_id" text;--> statement-br
 ALTER TABLE "organization" ADD COLUMN "stripe_subscription_id" text;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "stripe_price_id" text;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "current_period_ends_at" timestamp;--> statement-breakpoint
-ALTER TABLE "organization" ADD COLUMN "cancel_at_period_end" boolean;--> statement-breakpoint
+ALTER TABLE "organization" ADD COLUMN "cancellation_scheduled" boolean;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "has_default_payment_method" boolean;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "billing_access_ends_at" timestamp;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "billing_updated_at" timestamp;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "billing_sync_token" text;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "trial_reminder_claimed_at" timestamp;--> statement-breakpoint
+ALTER TABLE "organization" ADD COLUMN "trial_reminder_sent_for_trial_ends_at" timestamp;--> statement-breakpoint
 ALTER TABLE "organization" ADD CONSTRAINT "organization_stripe_customer_id_unique" UNIQUE("stripe_customer_id");--> statement-breakpoint
 ALTER TABLE "organization" ADD CONSTRAINT "organization_stripe_subscription_id_unique" UNIQUE("stripe_subscription_id");--> statement-breakpoint
 CREATE TABLE "stripe_webhook_event" (

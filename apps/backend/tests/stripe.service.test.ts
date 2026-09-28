@@ -466,7 +466,7 @@ describe('cloud subscription projection', () => {
 				}),
 			),
 		).resolves.toMatchObject({
-			cancelAtPeriodEnd: true,
+			cancellationScheduled: true,
 			hasDefaultPaymentMethod: false,
 			billingAccessEndsAt: new Date(cancellationEndsAt * 1_000),
 		});
@@ -518,7 +518,7 @@ describe('cloud billing recovery', () => {
 			{
 				id: 'in_cloud',
 				number: 'NAO-0001',
-				subscriptionType: 'cloud',
+				invoiceKind: 'subscription',
 				status: 'paid',
 				createdAt: new Date(1_795_000_000_000),
 				total: 200_000,
@@ -529,7 +529,7 @@ describe('cloud billing recovery', () => {
 			{
 				id: 'in_trial',
 				number: 'NAO-0002',
-				subscriptionType: 'trial',
+				invoiceKind: 'trial',
 				status: 'paid',
 				createdAt: new Date(1_794_000_000_000),
 				total: 0,
