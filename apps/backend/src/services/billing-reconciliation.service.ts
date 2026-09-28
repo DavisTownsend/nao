@@ -13,19 +13,6 @@ export async function reconcileCloudBillingCustomer(input: {
 	stripeCustomerId: string;
 	organizationIdHint?: string;
 }): Promise<CloudBillingReconciliationResult> {
-	for (let attempt = 0; attempt < 2; attempt += 1) {
-		const result = await reconcileCloudBillingCustomerOnce(input);
-		if (result.applied || result.ignored) {
-			return result;
-		}
-	}
-	throw new Error(`Stripe Customer "${input.stripeCustomerId}" reconciliation was repeatedly superseded`);
-}
-
-async function reconcileCloudBillingCustomerOnce(input: {
-	stripeCustomerId: string;
-	organizationIdHint?: string;
-}): Promise<CloudBillingReconciliationResult> {
 	const organization = await resolveOrganization(input.stripeCustomerId, input.organizationIdHint);
 	if (!organization) {
 		return { applied: false, ignored: true };

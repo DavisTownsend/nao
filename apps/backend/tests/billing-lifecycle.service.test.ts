@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
 	claimReminder: vi.fn(),
+	completeReminder: vi.fn(),
 	releaseReminder: vi.fn(),
 	getOrganization: vi.fn(),
 	listAdmins: vi.fn(),
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../src/queries/billing.queries', () => ({
 	claimTrialReminder: mocks.claimReminder,
+	completeTrialReminder: mocks.completeReminder,
 	releaseTrialReminder: mocks.releaseReminder,
 	listOrganizationsDueTrialReminder: mocks.listDueReminders,
 	listOrganizationsWithStripeCustomers: mocks.listMappedOrganizations,
@@ -47,6 +49,7 @@ describe('cloud billing lifecycle', () => {
 		mocks.listMappedOrganizations.mockResolvedValue([]);
 		mocks.listDueReminders.mockResolvedValue([]);
 		mocks.claimReminder.mockResolvedValue(true);
+		mocks.completeReminder.mockResolvedValue(undefined);
 		mocks.releaseReminder.mockResolvedValue(undefined);
 		mocks.sendEmail.mockResolvedValue(true);
 	});
@@ -107,12 +110,18 @@ describe('cloud billing lifecycle', () => {
 
 		await sendCloudTrialReminder('org-id', now);
 
-		expect(mocks.claimReminder).toHaveBeenCalledWith('org-id', organization.trialEndsAt, now);
+		expect(mocks.claimReminder).toHaveBeenCalledWith(
+			'org-id',
+			organization.trialEndsAt,
+			now,
+			new Date('2026-09-23T23:00:00.000Z'),
+		);
 		expect(mocks.sendEmail).toHaveBeenCalledOnce();
 		expect(mocks.sendEmail).toHaveBeenCalledWith(
 			'admin@example.com',
 			expect.objectContaining({ subject: 'Your nao Cloud trial ends soon' }),
 		);
+		expect(mocks.completeReminder).toHaveBeenCalledWith('org-id', organization.trialEndsAt, now);
 		expect(mocks.releaseReminder).not.toHaveBeenCalled();
 	});
 
@@ -123,6 +132,23 @@ describe('cloud billing lifecycle', () => {
 			billingStatus: 'trialing',
 			stripeSubscriptionId: null,
 			trialEndsAt: new Date('2026-09-27T00:00:00.000Z'),
+			trialReminderClaimedAt: null,
+		});
+
+		await sendCloudTrialReminder('org-id', new Date('2026-09-24T00:00:00.000Z'));
+
+		expect(mocks.listAdmins).not.toHaveBeenCalled();
+		expect(mocks.claimReminder).not.toHaveBeenCalled();
+		expect(mocks.sendEmail).not.toHaveBeenCalled();
+	});
+
+	it('does not email early when a delayed event follows a trial extension', async () => {
+		mocks.getOrganization.mockResolvedValue({
+			id: 'org-id',
+			name: 'Acme',
+			billingStatus: 'trialing',
+			stripeSubscriptionId: 'sub_cloud',
+			trialEndsAt: new Date('2026-10-08T00:00:00.000Z'),
 			trialReminderClaimedAt: null,
 		});
 
@@ -154,7 +180,7 @@ describe('cloud billing lifecycle', () => {
 		expect(mocks.releaseReminder).toHaveBeenCalledWith('org-id', trialEndsAt, now);
 	});
 
-	it('keeps the reminder claim when one admin email is delivered', async () => {
+	it('completes the reminder when at least one admin email is delivered', async () => {
 		mocks.getOrganization.mockResolvedValue({
 			id: 'org-id',
 			name: 'Acme',
@@ -172,6 +198,38 @@ describe('cloud billing lifecycle', () => {
 		await sendCloudTrialReminder('org-id', new Date('2026-09-24T00:00:00.000Z'));
 
 		expect(mocks.releaseReminder).not.toHaveBeenCalled();
+		expect(mocks.completeReminder).toHaveBeenCalledWith(
+			'org-id',
+			new Date('2026-09-27T00:00:00.000Z'),
+			new Date('2026-09-24T00:00:00.000Z'),
+		);
+	});
+
+	it('retries a reminder whose worker claim expired', async () => {
+		const now = new Date('2026-09-24T02:00:00.000Z');
+		const trialEndsAt = new Date('2026-09-27T00:00:00.000Z');
+		mocks.getOrganization.mockResolvedValue({
+			id: 'org-id',
+			name: 'Acme',
+			billingStatus: 'trialing',
+			stripeSubscriptionId: 'sub_cloud',
+			trialEndsAt,
+			trialReminderClaimedAt: new Date('2026-09-24T00:00:00.000Z'),
+		});
+		mocks.listAdmins.mockResolvedValue([
+			{ email: 'admin@example.com', name: 'Admin', role: 'admin', status: 'active' },
+		]);
+
+		await sendCloudTrialReminder('org-id', now);
+
+		expect(mocks.claimReminder).toHaveBeenCalledWith(
+			'org-id',
+			trialEndsAt,
+			now,
+			new Date('2026-09-24T01:00:00.000Z'),
+		);
+		expect(mocks.sendEmail).toHaveBeenCalledOnce();
+		expect(mocks.completeReminder).toHaveBeenCalledWith('org-id', trialEndsAt, now);
 	});
 
 	it('does not email when another worker already claimed the reminder', async () => {

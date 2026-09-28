@@ -49,6 +49,7 @@ import type Stripe from 'stripe';
 
 import { __reloadEnvForTesting } from '../src/env';
 import {
+	__resetStripeForTesting,
 	cloudSubscriptionProjection,
 	createCloudCheckoutSession,
 	createCloudCustomer,
@@ -74,6 +75,7 @@ beforeEach(() => {
 	process.env.STRIPE_SECRET_KEY = 'sk_test_example';
 	process.env.STRIPE_WEBHOOK_SECRET = 'whsec_example';
 	__reloadEnvForTesting();
+	__resetStripeForTesting();
 	vi.clearAllMocks();
 	stripeMocks.listPrices.mockResolvedValue({ data: [cloudMonthlyPrice()] });
 	stripeMocks.listCheckoutSessions.mockResolvedValue({ data: [] });
@@ -88,6 +90,7 @@ beforeEach(() => {
 afterEach(() => {
 	process.env = originalEnv;
 	__reloadEnvForTesting();
+	__resetStripeForTesting();
 });
 
 describe('getCloudMonthlyPrice', () => {
@@ -102,6 +105,17 @@ describe('getCloudMonthlyPrice', () => {
 			lookup_keys: ['nao_cloud_monthly_v2'],
 			limit: 1,
 		});
+	});
+
+	it('reuses the validated Price within the cache lifetime', async () => {
+		const expectedPrice = cloudMonthlyPrice();
+		stripeMocks.listPrices.mockResolvedValue({ data: [expectedPrice] });
+
+		await expect(Promise.all([getCloudMonthlyPrice(), getCloudMonthlyPrice()])).resolves.toEqual([
+			expectedPrice,
+			expectedPrice,
+		]);
+		expect(stripeMocks.listPrices).toHaveBeenCalledOnce();
 	});
 
 	it('rejects a missing Price', async () => {
@@ -291,6 +305,38 @@ describe('cloud Checkout', () => {
 		expect(stripeMocks.createCheckoutSession).not.toHaveBeenCalled();
 	});
 
+	it('creates a new Checkout after the previous Session was expired', async () => {
+		stripeMocks.listCheckoutSessions.mockResolvedValueOnce({ data: [] }).mockResolvedValueOnce({
+			data: [
+				{
+					id: 'cs_expired',
+					mode: 'subscription',
+					metadata: {
+						nao_org_id: 'org-id',
+						nao_plan_key: 'cloud_monthly_v2',
+						nao_checkout_kind: 'initial',
+					},
+				},
+			],
+		});
+		stripeMocks.createCheckoutSession.mockResolvedValue({
+			url: 'https://checkout.stripe.com/replacement',
+		});
+
+		await expect(
+			createCloudCheckoutSession({
+				organizationId: 'org-id',
+				stripeCustomerId: 'cus_cloud',
+				trialEndsAt: null,
+				trialDays: 14,
+			}),
+		).resolves.toBe('https://checkout.stripe.com/replacement');
+
+		expect(stripeMocks.createCheckoutSession).toHaveBeenCalledWith(expect.anything(), {
+			idempotencyKey: 'cloud-checkout-initial-v4:org-id:trial-14:cs_expired',
+		});
+	});
+
 	it('rejects initial Checkout when Stripe already has cloud subscription history', async () => {
 		stripeMocks.listSubscriptions.mockResolvedValue({ data: [cloudSubscription()] });
 
@@ -446,12 +492,24 @@ describe('cloud billing recovery', () => {
 				{
 					id: 'in_cloud',
 					number: 'NAO-0001',
+					billing_reason: 'subscription_create',
 					status: 'paid',
 					created: 1_795_000_000,
 					total: 200_000,
 					currency: 'eur',
 					hosted_invoice_url: 'https://invoice.stripe.com/in_cloud',
 					invoice_pdf: 'https://pay.stripe.com/invoice/in_cloud/pdf',
+				},
+				{
+					id: 'in_trial',
+					number: 'NAO-0002',
+					billing_reason: 'subscription_create',
+					status: 'paid',
+					created: 1_794_000_000,
+					total: 0,
+					currency: 'eur',
+					hosted_invoice_url: 'https://invoice.stripe.com/in_trial',
+					invoice_pdf: 'https://pay.stripe.com/invoice/in_trial/pdf',
 				},
 			],
 		});
@@ -460,12 +518,24 @@ describe('cloud billing recovery', () => {
 			{
 				id: 'in_cloud',
 				number: 'NAO-0001',
+				subscriptionType: 'cloud',
 				status: 'paid',
 				createdAt: new Date(1_795_000_000_000),
 				total: 200_000,
 				currency: 'eur',
 				hostedInvoiceUrl: 'https://invoice.stripe.com/in_cloud',
 				invoicePdf: 'https://pay.stripe.com/invoice/in_cloud/pdf',
+			},
+			{
+				id: 'in_trial',
+				number: 'NAO-0002',
+				subscriptionType: 'trial',
+				status: 'paid',
+				createdAt: new Date(1_794_000_000_000),
+				total: 0,
+				currency: 'eur',
+				hostedInvoiceUrl: 'https://invoice.stripe.com/in_trial',
+				invoicePdf: 'https://pay.stripe.com/invoice/in_trial/pdf',
 			},
 		]);
 		expect(stripeMocks.listInvoices).toHaveBeenCalledWith({ customer: 'cus_cloud', limit: 100 });

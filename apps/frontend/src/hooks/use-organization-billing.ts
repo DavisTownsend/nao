@@ -21,7 +21,7 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 	const [isPortalPolling, setIsPortalPolling] = useState(search.portal === 'returned');
 	const billing = useQuery({
 		...trpc.billing.getStatus.queryOptions(),
-		refetchOnWindowFocus: 'always',
+		refetchOnWindowFocus: false,
 		refetchInterval: (query) =>
 			(isCheckoutPolling &&
 				(search.checkout === 'subscribed'
@@ -35,7 +35,7 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 	const invoices = useQuery({
 		...trpc.billing.getInvoices.queryOptions(),
 		enabled: billing.data?.canManageBilling === true && billing.data.invoiceHistoryAvailable,
-		refetchOnWindowFocus: 'always',
+		refetchOnWindowFocus: false,
 	});
 	const startTrial = useMutation(
 		trpc.billing.startTrial.mutationOptions({
@@ -131,6 +131,12 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 		const timeout = window.setTimeout(() => setIsCheckoutPolling(false), STATUS_CONFIRMATION_TIMEOUT_MS);
 		return () => window.clearTimeout(timeout);
 	}, [isCheckoutConfirmed, isCheckoutPolling]);
+
+	useEffect(() => {
+		if (status) {
+			void queryClient.invalidateQueries({ queryKey: trpc.billing.getAccess.queryKey() });
+		}
+	}, [queryClient, status]);
 
 	useEffect(() => {
 		if (!isResumeConfirming) {

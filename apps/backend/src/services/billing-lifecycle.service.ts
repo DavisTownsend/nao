@@ -6,6 +6,7 @@ import { reconcileCloudBillingCustomer } from './billing-reconciliation.service'
 import { emailService } from './email';
 
 const TRIAL_REMINDER_LEAD_MS = 3 * 24 * 60 * 60 * 1000;
+const TRIAL_REMINDER_CLAIM_LEASE_MS = 60 * 60 * 1000;
 const RECONCILIATION_CONCURRENCY = 5;
 
 export async function runCloudBillingLifecycle(now = new Date()): Promise<void> {
@@ -18,12 +19,14 @@ export async function sendCloudTrialReminder(organizationId: string, now = new D
 		return;
 	}
 	const organization = await organizationQueries.getOrganizationById(organizationId);
+	const claimableBefore = new Date(now.getTime() - TRIAL_REMINDER_CLAIM_LEASE_MS);
 	if (
 		organization?.billingStatus !== 'trialing' ||
 		!organization.stripeSubscriptionId ||
 		!organization.trialEndsAt ||
 		organization.trialEndsAt.getTime() <= now.getTime() ||
-		organization.trialReminderClaimedAt
+		organization.trialEndsAt.getTime() > now.getTime() + TRIAL_REMINDER_LEAD_MS ||
+		(organization.trialReminderClaimedAt && organization.trialReminderClaimedAt > claimableBefore)
 	) {
 		return;
 	}
@@ -35,17 +38,24 @@ export async function sendCloudTrialReminder(organizationId: string, now = new D
 	if (admins.length === 0) {
 		return;
 	}
-	if (!(await billingQueries.claimTrialReminder(organization.id, trialEndsAt, now))) {
+	if (!(await billingQueries.claimTrialReminder(organization.id, trialEndsAt, now, claimableBefore))) {
 		return;
 	}
 
-	const delivered = await Promise.all(
-		admins.map((admin) =>
-			emailService.sendEmail(admin.email, buildCloudTrialEndingEmail(admin, organization.name, trialEndsAt)),
-		),
-	);
-	if (!delivered.some(Boolean)) {
+	try {
+		const delivered = await Promise.all(
+			admins.map((admin) =>
+				emailService.sendEmail(admin.email, buildCloudTrialEndingEmail(admin, organization.name, trialEndsAt)),
+			),
+		);
+		if (delivered.some(Boolean)) {
+			await billingQueries.completeTrialReminder(organization.id, trialEndsAt, now);
+			return;
+		}
 		await billingQueries.releaseTrialReminder(organization.id, trialEndsAt, now);
+	} catch (error) {
+		await billingQueries.releaseTrialReminder(organization.id, trialEndsAt, now);
+		throw error;
 	}
 }
 
@@ -77,7 +87,8 @@ async function reconcileOrganization(
 
 async function sendDueCloudTrialReminders(now: Date): Promise<void> {
 	const dueBefore = new Date(now.getTime() + TRIAL_REMINDER_LEAD_MS);
-	const organizations = await billingQueries.listOrganizationsDueTrialReminder(now, dueBefore);
+	const claimableBefore = new Date(now.getTime() - TRIAL_REMINDER_CLAIM_LEASE_MS);
+	const organizations = await billingQueries.listOrganizationsDueTrialReminder(now, dueBefore, claimableBefore);
 	for (const organization of organizations) {
 		try {
 			await sendCloudTrialReminder(organization.id, now);

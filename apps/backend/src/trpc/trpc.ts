@@ -75,14 +75,11 @@ export async function resolveOrganizationMembership(userId: string, selectedProj
 		return membership;
 	}
 
-	const memberships = await orgQueries.listUserOrgMemberships(userId, 2);
-	if (memberships.length > 1) {
-		throw new TRPCError({ code: 'BAD_REQUEST', message: 'Select a project to choose an organization' });
-	}
-	if (!memberships[0]) {
+	const membership = await orgQueries.getUserOrgMembership(userId);
+	if (!membership) {
 		throw new TRPCError({ code: 'NOT_FOUND', message: 'You are not a member of any organization' });
 	}
-	return memberships[0];
+	return membership;
 }
 
 export const projectProtectedProcedure = protectedProcedure.use(async ({ ctx, next }) => {

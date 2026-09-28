@@ -5,7 +5,7 @@ import { sendCloudTrialReminder } from '../services/billing-lifecycle.service';
 import { reconcileCloudBillingCustomer } from '../services/billing-reconciliation.service';
 import type { JobHandler } from '../services/scheduler.service';
 import { getCloudCheckoutSubscription, getCloudSubscription, getStripeEvent } from '../services/stripe.service';
-import { STRIPE_WEBHOOK_JOB_NAME } from '../types/billing';
+import { CLOUD_MONTHLY_PLAN, STRIPE_WEBHOOK_JOB_NAME } from '../types/billing';
 
 export { STRIPE_WEBHOOK_JOB_NAME };
 
@@ -58,6 +58,9 @@ export const stripeWebhookHandler: JobHandler<{ eventId?: unknown }> = async (pa
 async function processStripeEvent(event: Stripe.Event): Promise<void> {
 	if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
 		const eventSession = event.data.object as Stripe.Checkout.Session;
+		if (eventSession.mode !== 'subscription' || eventSession.metadata?.nao_plan_key !== CLOUD_MONTHLY_PLAN.key) {
+			return;
+		}
 		const { session, subscription } = await getCloudCheckoutSubscription(eventSession.id);
 		const organizationId = session.metadata?.nao_org_id ?? session.client_reference_id;
 		if (!organizationId) {

@@ -119,8 +119,13 @@ async function runReclaim(): Promise<void> {
 async function executeJob(job: DBScheduledJob): Promise<void> {
 	const handler = handlers.get(job.name);
 	if (!handler) {
-		await scheduledJobQueries.markJobFailed(job.id, `No handler registered for '${job.name}'`, null);
-		logger.error(`Scheduler dropped job '${job.name}': no handler registered`, {
+		const canRetry = job.attempts < job.maxAttempts;
+		await scheduledJobQueries.markJobFailed(
+			job.id,
+			`No handler registered for '${job.name}'`,
+			canRetry ? new Date(Date.now() + RECLAIM_INTERVAL_MS) : null,
+		);
+		logger.warn(`Scheduler ${canRetry ? 'deferred' : 'dropped'} job '${job.name}': no handler registered`, {
 			source: 'system',
 			context: { jobId: job.id, name: job.name },
 		});

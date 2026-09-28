@@ -183,6 +183,7 @@ export async function executeRawSql(
 	sqlQuery: string,
 	options: RawSqlExecutionOptions,
 ): Promise<{ data: unknown[]; columns: string[] }> {
+	await assertProjectCloudBillingAccess(options.projectId);
 	const enforceExcludedColumns = await resolveExcludedColumnEnforcementForProject(options.projectId);
 	const response = await fetch(`http://localhost:${env.FASTAPI_PORT}/execute_sql`, {
 		method: 'POST',

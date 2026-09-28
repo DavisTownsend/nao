@@ -66,7 +66,7 @@ describe('stripeWebhookHandler', () => {
 		};
 		mocks.getEvent.mockResolvedValue({
 			type: 'checkout.session.completed',
-			data: { object: { id: 'cs_cloud' } },
+			data: { object: { id: 'cs_cloud', mode: 'subscription', metadata: { nao_plan_key: 'cloud_monthly_v2' } } },
 		});
 		mocks.getCheckoutSubscription.mockResolvedValue({
 			session: {
@@ -83,6 +83,18 @@ describe('stripeWebhookHandler', () => {
 			stripeCustomerId: 'cus_cloud',
 			organizationIdHint: 'org-id',
 		});
+		expect(mocks.markProcessed).toHaveBeenCalledWith('evt_123');
+	});
+
+	it('acknowledges Checkout sessions that are not cloud subscriptions', async () => {
+		mocks.getEvent.mockResolvedValue({
+			type: 'checkout.session.completed',
+			data: { object: { id: 'cs_topup', mode: 'payment', metadata: {} } },
+		});
+
+		await stripeWebhookHandler({ eventId: 'evt_123' }, {} as never);
+
+		expect(mocks.getCheckoutSubscription).not.toHaveBeenCalled();
 		expect(mocks.markProcessed).toHaveBeenCalledWith('evt_123');
 	});
 

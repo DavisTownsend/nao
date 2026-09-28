@@ -25,6 +25,8 @@ import { db } from '../src/db/db';
 import {
 	claimBillingSync,
 	claimTrialReminder,
+	completeTrialReminder,
+	listOrganizationsDueTrialReminder,
 	releaseTrialReminder,
 	type SubscriptionProjection,
 	updateSubscriptionProjection,
@@ -110,6 +112,7 @@ describe('billing consistency queries', () => {
 	it('claims a trial reminder only once', async () => {
 		const trialEndsAt = new Date('2026-10-08T00:00:00.000Z');
 		const claimedAt = new Date('2026-10-05T00:00:00.000Z');
+		const claimableBefore = new Date('2026-10-04T23:00:00.000Z');
 		await db.insert(s.organization).values({
 			id: 'trial-reminder-org',
 			name: 'Trial Reminder',
@@ -119,10 +122,45 @@ describe('billing consistency queries', () => {
 			trialEndsAt,
 		});
 
-		await expect(claimTrialReminder('trial-reminder-org', trialEndsAt, claimedAt)).resolves.toBe(true);
-		await expect(claimTrialReminder('trial-reminder-org', trialEndsAt, claimedAt)).resolves.toBe(false);
+		await expect(claimTrialReminder('trial-reminder-org', trialEndsAt, claimedAt, claimableBefore)).resolves.toBe(
+			true,
+		);
+		await expect(claimTrialReminder('trial-reminder-org', trialEndsAt, claimedAt, claimableBefore)).resolves.toBe(
+			false,
+		);
 		await releaseTrialReminder('trial-reminder-org', trialEndsAt, claimedAt);
-		await expect(claimTrialReminder('trial-reminder-org', trialEndsAt, claimedAt)).resolves.toBe(true);
+		await expect(claimTrialReminder('trial-reminder-org', trialEndsAt, claimedAt, claimableBefore)).resolves.toBe(
+			true,
+		);
+		await completeTrialReminder('trial-reminder-org', trialEndsAt, claimedAt);
+		await expect(
+			claimTrialReminder(
+				'trial-reminder-org',
+				trialEndsAt,
+				new Date('2026-10-05T02:00:00.000Z'),
+				new Date('2026-10-05T01:00:00.000Z'),
+			),
+		).resolves.toBe(false);
+
+		await db
+			.update(s.organization)
+			.set({ trialReminderClaimedAt: claimedAt })
+			.where(eq(s.organization.id, 'trial-reminder-org'));
+		await expect(
+			listOrganizationsDueTrialReminder(
+				new Date('2026-10-05T02:00:00.000Z'),
+				new Date('2026-10-08T02:00:00.000Z'),
+				new Date('2026-10-05T01:00:00.000Z'),
+			),
+		).resolves.toEqual([expect.objectContaining({ id: 'trial-reminder-org' })]);
+		await expect(
+			claimTrialReminder(
+				'trial-reminder-org',
+				trialEndsAt,
+				new Date('2026-10-05T02:00:00.000Z'),
+				new Date('2026-10-05T01:00:00.000Z'),
+			),
+		).resolves.toBe(true);
 	});
 });
 

@@ -11,6 +11,7 @@ type CloudBillingEntitlement = {
 	currentPeriodEndsAt: Date | null;
 	billingAccessEndsAt: Date | null;
 	cancelAtPeriodEnd?: boolean | null;
+	hasDefaultPaymentMethod?: boolean | null;
 };
 
 class CloudBillingAccessRestrictedError extends HandlerError {
@@ -34,11 +35,13 @@ export function hasCloudBillingAccess(
 
 	switch (entitlement.billingStatus) {
 		case 'trialing':
-			return (
-				entitlement.stripeSubscriptionId !== null &&
-				isAfter(entitlement.trialEndsAt, now) &&
-				(!entitlement.billingAccessEndsAt || isAfter(entitlement.billingAccessEndsAt, now))
-			);
+			if (entitlement.stripeSubscriptionId === null) {
+				return false;
+			}
+			return entitlement.hasDefaultPaymentMethod && !entitlement.cancelAtPeriodEnd
+				? isAfterWithGrace(entitlement.trialEndsAt, now, ACTIVE_RECONCILIATION_GRACE_MS)
+				: isAfter(entitlement.trialEndsAt, now) &&
+						(!entitlement.billingAccessEndsAt || isAfter(entitlement.billingAccessEndsAt, now));
 		case 'active':
 			return entitlement.cancelAtPeriodEnd
 				? isAfter(entitlement.billingAccessEndsAt ?? entitlement.currentPeriodEndsAt, now)

@@ -641,7 +641,8 @@ flowchart TD
     Reread["Re-read billing state and active admins"]
     Claim{"Atomically claim reminder?"}
     Send["Send reminder to every active admin"]
-    Delivered{"At least one delivered?"}
+    Delivered{"Every reminder delivered?"}
+    Complete["Mark reminder delivered"]
     Release["Release exact claim for retry"]
     Done["Done"]
 
@@ -651,7 +652,7 @@ flowchart TD
     Due --> Reread --> Claim
     Claim -->|No| Done
     Claim -->|Yes| Send --> Delivered
-    Delivered -->|Yes| Done
+    Delivered -->|Yes| Complete --> Done
     Delivered -->|No| Release --> Done
 ```
 
@@ -743,8 +744,9 @@ The hourly lifecycle job and Stripe's `trial_will_end` event share one persisted
 
 - Reminders are due three days before trial expiry.
 - Billing state and current active admins are re-read before sending.
-- A successful delivery to at least one admin consumes the claim.
-- If every send fails, the exact claim is released so a later run can retry.
+- Successful delivery to every active admin completes the reminder.
+- Any failed delivery releases the exact claim so a later run can retry.
+- Worker claims expire after one hour so a crashed delivery attempt can recover.
 - Concurrent workers cannot claim the same reminder.
 
 ## Billing API and UI

@@ -58,6 +58,7 @@ import { teamsRoutes } from './routes/teams';
 import { telegramRoutes } from './routes/telegram';
 import { testRoutes } from './routes/test';
 import { whatsappRoutes } from './routes/whatsapp';
+import { emailService } from './services/email';
 import { startLicenseHeartbeat } from './services/license.service';
 import { logLicenseStatus } from './services/license-startup';
 import { mattermostService } from './services/mattermost';
@@ -404,6 +405,11 @@ export const startServer = async (opts: { port: number; host: string }) => {
 	registerJob(AUTOMATION_JOB_NAME, automationHandler);
 	registerJob(STORY_REFRESH_JOB_NAME, storyRefreshHandler);
 	if (isCloudBillingEnabled()) {
+		if (!emailService.isEnabled()) {
+			logger.warn('Cloud billing trial reminders are disabled because SMTP is not configured', {
+				source: 'system',
+			});
+		}
 		registerJob(STRIPE_WEBHOOK_JOB_NAME, stripeWebhookHandler);
 		registerJob(BILLING_LIFECYCLE_JOB_NAME, billingLifecycleHandler);
 		await ensureRecurring({

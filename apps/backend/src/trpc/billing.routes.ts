@@ -23,12 +23,20 @@ import {
 import { CLOUD_MONTHLY_PLAN } from '../types/billing';
 import type { HandlerErrorCode } from '../utils/error';
 import { logger } from '../utils/logger';
-import { protectedProcedure, resolveOrganizationMembership } from './trpc';
+import { publicProcedure, resolveOrganizationMembership } from './trpc';
 
-const cloudBillingMemberProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+const cloudBillingProcedure = publicProcedure.use(async ({ ctx, next }) => {
 	if (!isCloudBillingEnabled()) {
 		throw new TRPCError({ code: 'NOT_FOUND' });
 	}
+	if (!ctx.session?.user) {
+		throw new TRPCError({ code: 'UNAUTHORIZED' });
+	}
+
+	return next({ ctx: { user: ctx.session.user } });
+});
+
+const cloudBillingMemberProcedure = cloudBillingProcedure.use(async ({ ctx, next }) => {
 	const membership = await resolveOrganizationMembership(ctx.user.id, ctx.selectedProjectId);
 
 	return next({
@@ -68,7 +76,9 @@ export const billingRoutes = {
 			userId: ctx.user.id,
 			organizationId: ctx.organization.id,
 		});
-		const { availablePlan, subscriptionPlan } = await getCloudBillingPlans(organization.stripePriceId);
+		const { availablePlan, subscriptionPlan } = await getCloudBillingPlans(organization.stripePriceId).catch(
+			(error: unknown) => throwBillingFailure('plan lookup', 'Unable to load billing plans', error),
+		);
 		return {
 			plan: organization.billingPlan === CLOUD_MONTHLY_PLAN.key ? (subscriptionPlan ?? availablePlan) : null,
 			availablePlan,

@@ -9,6 +9,7 @@ import {
 	formatBillingInterval,
 	formatBillingPrice,
 	formatBillingStatus,
+	formatInvoiceLabel,
 	getBillingManagementDescription,
 	getBillingPortalButtonLabel,
 	preservesRemainingTrial,
@@ -278,12 +279,20 @@ function InvoicesCard({ billingState }: { billingState: BillingState }) {
 							className='flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between'
 						>
 							<div>
-								<p className='font-medium text-foreground'>{invoice.number ?? 'Invoice'}</p>
+								<div className='flex items-center gap-2'>
+									<p className='font-medium text-foreground'>
+										{formatInvoiceLabel(invoice.createdAt)}
+									</p>
+									<Badge variant='secondary'>
+										{invoice.subscriptionType === 'trial' ? 'Trial' : 'Cloud'}
+									</Badge>
+								</div>
 								<p className='text-sm text-muted-foreground'>
 									{formatBillingDate(invoice.createdAt)} ·{' '}
 									{formatBillingPrice(invoice.total, invoice.currency)} ·{' '}
 									{formatBillingStatus(invoice.status)}
 								</p>
+								{invoice.number && <p className='text-xs text-muted-foreground'>{invoice.number}</p>}
 							</div>
 							<div className='flex flex-wrap gap-2'>
 								{invoice.hostedInvoiceUrl && (

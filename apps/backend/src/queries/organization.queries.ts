@@ -48,8 +48,8 @@ export const addOrgMemberIfMissing = async (member: NewOrgMember): Promise<void>
 
 type UserOrgMembership = DBOrgMember & { organization: DBOrganization };
 
-export const listUserOrgMemberships = async (userId: string, limit: number): Promise<UserOrgMembership[]> => {
-	return db
+export const getUserOrgMembership = async (userId: string): Promise<UserOrgMembership | null> => {
+	const [result] = await db
 		.select({
 			orgId: s.orgMember.orgId,
 			userId: s.orgMember.userId,
@@ -60,12 +60,10 @@ export const listUserOrgMemberships = async (userId: string, limit: number): Pro
 		.from(s.orgMember)
 		.innerJoin(s.organization, eq(s.orgMember.orgId, s.organization.id))
 		.where(eq(s.orgMember.userId, userId))
-		.limit(limit)
+		.orderBy(asc(s.orgMember.createdAt))
+		.limit(1)
 		.execute();
-};
-
-export const getUserOrgMembership = async (userId: string): Promise<UserOrgMembership | null> => {
-	return (await listUserOrgMemberships(userId, 1))[0] ?? null;
+	return result ?? null;
 };
 
 export const getUserOrgMembershipByProject = async (

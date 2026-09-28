@@ -25,7 +25,7 @@ vi.mock('../src/queries/project.queries', () => ({}));
 
 vi.mock('../src/queries/organization.queries', () => ({
 	getUserOrgMembershipByProject: vi.fn(async () => testState.membership),
-	listUserOrgMemberships: vi.fn(async () => (testState.membership ? [testState.membership] : [])),
+	getUserOrgMembership: vi.fn(async () => testState.membership),
 	getOrgMember: vi.fn(async () => testState.membership),
 	getOrganizationById: vi.fn(async () => testState.membership?.organization ?? null),
 }));
@@ -185,7 +185,17 @@ describe('billing.getStatus', () => {
 
 		await expect(caller('project-id').billing.getStatus()).resolves.toMatchObject({ status: 'active' });
 		expect(orgQueries.getUserOrgMembershipByProject).toHaveBeenCalledWith('user-id', 'project-id');
-		expect(orgQueries.listUserOrgMemberships).not.toHaveBeenCalled();
+		expect(orgQueries.getUserOrgMembership).not.toHaveBeenCalled();
+	});
+
+	it('hides Stripe configuration errors from the client', async () => {
+		testState.membership = membership({ billingStatus: 'active' });
+		stripeMocks.getBillingPlans.mockRejectedValueOnce(new Error('Invalid API Key provided: sk_live_****1234'));
+
+		await expect(caller().billing.getStatus()).rejects.toMatchObject({
+			code: 'INTERNAL_SERVER_ERROR',
+			message: 'Unable to load billing plans',
+		});
 	});
 
 	it('rejects non-admin members', async () => {
@@ -199,24 +209,21 @@ describe('billing.getStatus', () => {
 		vi.mocked(orgQueries.getUserOrgMembershipByProject).mockResolvedValueOnce(null);
 
 		await expect(caller('stale-project-id').billing.getStatus()).rejects.toMatchObject({ code: 'NOT_FOUND' });
-		expect(orgQueries.listUserOrgMemberships).not.toHaveBeenCalled();
-	});
-
-	it('requires a project when organization membership is ambiguous', async () => {
-		testState.membership = membership({});
-		vi.mocked(orgQueries.listUserOrgMemberships).mockResolvedValueOnce([
-			testState.membership,
-			membership({}),
-		] as never);
-
-		await expect(caller().billing.getStatus()).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+		expect(orgQueries.getUserOrgMembership).not.toHaveBeenCalled();
 	});
 
 	it('is unavailable without querying an organization when cloud billing is disabled', async () => {
 		testState.billingEnabled = false;
 
 		await expect(caller().billing.getStatus()).rejects.toMatchObject({ code: 'NOT_FOUND' });
-		expect(orgQueries.listUserOrgMemberships).not.toHaveBeenCalled();
+		expect(orgQueries.getUserOrgMembership).not.toHaveBeenCalled();
+	});
+
+	it('returns not found before authentication when cloud billing is disabled', async () => {
+		testState.billingEnabled = false;
+
+		await expect(anonymousCaller().billing.getStatus()).rejects.toMatchObject({ code: 'NOT_FOUND' });
+		expect(orgQueries.getUserOrgMembership).not.toHaveBeenCalled();
 	});
 });
 
@@ -424,6 +431,10 @@ function caller(selectedProjectId: string | null = null) {
 		},
 		selectedProjectId,
 	} as never);
+}
+
+function anonymousCaller() {
+	return testRouter.createCaller({ session: null, selectedProjectId: null } as never);
 }
 
 function membership(organization: Record<string, unknown>, role = 'admin') {

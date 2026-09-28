@@ -43,6 +43,29 @@ describe('cloud billing access entitlement', () => {
 		],
 		['trial missing its end', true, entitlement('trialing'), false],
 		[
+			'paying trial within conversion grace',
+			true,
+			entitlement('trialing', {
+				stripeSubscriptionId: 'sub_trial',
+				trialEndsAt: recentlyPast,
+				billingAccessEndsAt: recentlyPast,
+				hasDefaultPaymentMethod: true,
+			}),
+			true,
+		],
+		[
+			'canceling paying trial past its end',
+			true,
+			entitlement('trialing', {
+				stripeSubscriptionId: 'sub_trial',
+				trialEndsAt: recentlyPast,
+				billingAccessEndsAt: recentlyPast,
+				hasDefaultPaymentMethod: true,
+				cancelAtPeriodEnd: true,
+			}),
+			false,
+		],
+		[
 			'renewing active within reconciliation grace',
 			true,
 			entitlement('active', { currentPeriodEndsAt: recentlyPast }),
@@ -87,6 +110,7 @@ function entitlement(
 		currentPeriodEndsAt: Date;
 		billingAccessEndsAt: Date;
 		cancelAtPeriodEnd: boolean;
+		hasDefaultPaymentMethod: boolean;
 	}> = {},
 ) {
 	return {

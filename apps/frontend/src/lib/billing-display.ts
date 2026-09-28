@@ -167,6 +167,10 @@ export function formatBillingStatus(status: string | null): string {
 		: 'Not configured';
 }
 
+export function formatInvoiceLabel(date: Date): string {
+	return new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(date);
+}
+
 export function formatBillingDate(date: Date | null): string {
 	return date ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date) : '—';
 }

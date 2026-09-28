@@ -1,4 +1,4 @@
-import { and, eq, gt, isNotNull, isNull, lte } from 'drizzle-orm';
+import { and, eq, gt, isNotNull, isNull, lte, or } from 'drizzle-orm';
 
 import s, { DBOrganization, DBStripeWebhookEvent, NewStripeWebhookEvent } from '../db/abstractSchema';
 import { db } from '../db/db';
@@ -67,7 +67,11 @@ export async function listOrganizationsWithStripeCustomers(): Promise<DBOrganiza
 	return db.select().from(s.organization).where(isNotNull(s.organization.stripeCustomerId)).execute();
 }
 
-export async function listOrganizationsDueTrialReminder(now: Date, dueBefore: Date): Promise<DBOrganization[]> {
+export async function listOrganizationsDueTrialReminder(
+	now: Date,
+	dueBefore: Date,
+	claimableBefore: Date,
+): Promise<DBOrganization[]> {
 	return db
 		.select()
 		.from(s.organization)
@@ -78,13 +82,21 @@ export async function listOrganizationsDueTrialReminder(now: Date, dueBefore: Da
 				isNotNull(s.organization.trialEndsAt),
 				gt(s.organization.trialEndsAt, now),
 				lte(s.organization.trialEndsAt, dueBefore),
-				isNull(s.organization.trialReminderClaimedAt),
+				or(
+					isNull(s.organization.trialReminderClaimedAt),
+					lte(s.organization.trialReminderClaimedAt, claimableBefore),
+				),
 			),
 		)
 		.execute();
 }
 
-export async function claimTrialReminder(orgId: string, trialEndsAt: Date, claimedAt: Date): Promise<boolean> {
+export async function claimTrialReminder(
+	orgId: string,
+	trialEndsAt: Date,
+	claimedAt: Date,
+	claimableBefore: Date,
+): Promise<boolean> {
 	const [claimed] = await db
 		.update(s.organization)
 		.set({ trialReminderClaimedAt: claimedAt })
@@ -94,12 +106,29 @@ export async function claimTrialReminder(orgId: string, trialEndsAt: Date, claim
 				eq(s.organization.billingStatus, 'trialing'),
 				isNotNull(s.organization.stripeSubscriptionId),
 				eq(s.organization.trialEndsAt, trialEndsAt),
-				isNull(s.organization.trialReminderClaimedAt),
+				or(
+					isNull(s.organization.trialReminderClaimedAt),
+					lte(s.organization.trialReminderClaimedAt, claimableBefore),
+				),
 			),
 		)
 		.returning({ id: s.organization.id })
 		.execute();
 	return Boolean(claimed);
+}
+
+export async function completeTrialReminder(orgId: string, trialEndsAt: Date, claimedAt: Date): Promise<void> {
+	await db
+		.update(s.organization)
+		.set({ trialReminderClaimedAt: trialEndsAt })
+		.where(
+			and(
+				eq(s.organization.id, orgId),
+				eq(s.organization.trialEndsAt, trialEndsAt),
+				eq(s.organization.trialReminderClaimedAt, claimedAt),
+			),
+		)
+		.execute();
 }
 
 export async function releaseTrialReminder(orgId: string, trialEndsAt: Date, claimedAt: Date): Promise<void> {

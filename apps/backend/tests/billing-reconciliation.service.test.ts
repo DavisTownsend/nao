@@ -141,17 +141,14 @@ describe('cloud billing reconciliation', () => {
 		expect(mocks.claimSync).not.toHaveBeenCalled();
 	});
 
-	it('retries when a concurrent reconciliation supersedes its sync token', async () => {
+	it('yields to a concurrent reconciliation that superseded its sync token', async () => {
 		mocks.listSubscriptions.mockResolvedValue([buildSubscription()]);
-		mocks.updateSubscription.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+		mocks.updateSubscription.mockResolvedValue(false);
 
 		await expect(reconcileCloudBillingCustomer({ stripeCustomerId: 'cus_cloud' })).resolves.toEqual({
-			applied: true,
+			applied: false,
 			ignored: false,
 		});
-
-		expect(mocks.claimSync).toHaveBeenCalledTimes(2);
-		expect(mocks.listSubscriptions).toHaveBeenCalledTimes(2);
 	});
 });
 

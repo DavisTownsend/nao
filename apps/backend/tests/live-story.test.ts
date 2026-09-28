@@ -68,7 +68,8 @@ vi.mock('../src/utils/story-query-data', () => ({
 	findMissingQueryIds: vi.fn(),
 }));
 
-import { executeLiveQuery, refreshStoryData } from '../src/services/live-story';
+import { assertProjectCloudBillingAccess } from '../src/services/cloud-billing-access.service';
+import { executeLiveQuery, executeRawSql, refreshStoryData } from '../src/services/live-story';
 
 describe('live story SQL execution', () => {
 	beforeEach(() => {
@@ -160,6 +161,17 @@ describe('live story SQL execution', () => {
 			database_id: 'analytics',
 			env_vars: { TOKEN: 'secret' },
 		});
+	});
+
+	it('does not run warehouse SQL when cloud billing access is restricted', async () => {
+		vi.mocked(assertProjectCloudBillingAccess).mockRejectedValueOnce(new Error('restricted'));
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			executeRawSql('SELECT * FROM orders', { projectFolder: '/project', projectId: 'project-1' }),
+		).rejects.toThrow('restricted');
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it('uses the app database when a single live query came from admin mode', async () => {
