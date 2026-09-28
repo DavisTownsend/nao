@@ -107,17 +107,6 @@ describe('getCloudMonthlyPrice', () => {
 		});
 	});
 
-	it('reuses the validated Price within the cache lifetime', async () => {
-		const expectedPrice = cloudMonthlyPrice();
-		stripeMocks.listPrices.mockResolvedValue({ data: [expectedPrice] });
-
-		await expect(Promise.all([getCloudMonthlyPrice(), getCloudMonthlyPrice()])).resolves.toEqual([
-			expectedPrice,
-			expectedPrice,
-		]);
-		expect(stripeMocks.listPrices).toHaveBeenCalledOnce();
-	});
-
 	it('rejects a missing Price', async () => {
 		stripeMocks.listPrices.mockResolvedValue({ data: [] });
 

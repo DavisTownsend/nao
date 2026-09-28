@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const NOW = new Date('2026-09-24T00:00:00.000Z');
+const TRIAL_ENDS_AT = new Date('2026-09-27T00:00:00.000Z');
+
 const mocks = vi.hoisted(() => ({
 	claimReminder: vi.fn(),
 	completeReminder: vi.fn(),
@@ -93,27 +96,19 @@ describe('cloud billing lifecycle', () => {
 	});
 
 	it('claims one reminder and emails active organization admins', async () => {
-		const now = new Date('2026-09-24T00:00:00.000Z');
-		const organization = {
-			id: 'org-id',
-			name: 'Acme',
-			billingStatus: 'trialing',
-			stripeSubscriptionId: 'sub_cloud',
-			trialEndsAt: new Date('2026-09-27T00:00:00.000Z'),
-			trialReminderClaimedAt: null,
-		};
+		const organization = billingOrganization();
 		mocks.getOrganization.mockResolvedValue(organization);
 		mocks.listAdmins.mockResolvedValue([
 			{ email: 'admin@example.com', name: 'Admin', role: 'admin', status: 'active' },
 			{ email: 'member@example.com', name: 'Member', role: 'member', status: 'active' },
 		]);
 
-		await sendCloudTrialReminder('org-id', now);
+		await sendCloudTrialReminder('org-id', NOW);
 
 		expect(mocks.claimReminder).toHaveBeenCalledWith(
 			'org-id',
 			organization.trialEndsAt,
-			now,
+			NOW,
 			new Date('2026-09-23T23:00:00.000Z'),
 		);
 		expect(mocks.sendEmail).toHaveBeenCalledOnce();
@@ -121,57 +116,18 @@ describe('cloud billing lifecycle', () => {
 			'admin@example.com',
 			expect.objectContaining({ subject: 'Your nao Cloud trial ends soon' }),
 		);
-		expect(mocks.completeReminder).toHaveBeenCalledWith('org-id', organization.trialEndsAt, now);
+		expect(mocks.completeReminder).toHaveBeenCalledWith('org-id', organization.trialEndsAt, NOW);
 		expect(mocks.releaseReminder).not.toHaveBeenCalled();
 	});
 
-	it('does not email an unconfirmed local trial', async () => {
-		mocks.getOrganization.mockResolvedValue({
-			id: 'org-id',
-			name: 'Acme',
-			billingStatus: 'trialing',
-			stripeSubscriptionId: null,
-			trialEndsAt: new Date('2026-09-27T00:00:00.000Z'),
-			trialReminderClaimedAt: null,
-		});
+	it.each([
+		['without a Stripe subscription', { stripeSubscriptionId: null }],
+		['before the reminder window', { trialEndsAt: new Date('2026-10-08T00:00:00.000Z') }],
+		['after completion for the current trial', { trialReminderSentForTrialEndsAt: TRIAL_ENDS_AT }],
+	])('does not email %s', async (_name, overrides) => {
+		mocks.getOrganization.mockResolvedValue(billingOrganization(overrides));
 
-		await sendCloudTrialReminder('org-id', new Date('2026-09-24T00:00:00.000Z'));
-
-		expect(mocks.listAdmins).not.toHaveBeenCalled();
-		expect(mocks.claimReminder).not.toHaveBeenCalled();
-		expect(mocks.sendEmail).not.toHaveBeenCalled();
-	});
-
-	it('does not email early when a delayed event follows a trial extension', async () => {
-		mocks.getOrganization.mockResolvedValue({
-			id: 'org-id',
-			name: 'Acme',
-			billingStatus: 'trialing',
-			stripeSubscriptionId: 'sub_cloud',
-			trialEndsAt: new Date('2026-10-08T00:00:00.000Z'),
-			trialReminderClaimedAt: null,
-		});
-
-		await sendCloudTrialReminder('org-id', new Date('2026-09-24T00:00:00.000Z'));
-
-		expect(mocks.listAdmins).not.toHaveBeenCalled();
-		expect(mocks.claimReminder).not.toHaveBeenCalled();
-		expect(mocks.sendEmail).not.toHaveBeenCalled();
-	});
-
-	it('does not resend a reminder completed for the current trial end', async () => {
-		const trialEndsAt = new Date('2026-09-27T00:00:00.000Z');
-		mocks.getOrganization.mockResolvedValue({
-			id: 'org-id',
-			name: 'Acme',
-			billingStatus: 'trialing',
-			stripeSubscriptionId: 'sub_cloud',
-			trialEndsAt,
-			trialReminderClaimedAt: null,
-			trialReminderSentForTrialEndsAt: trialEndsAt,
-		});
-
-		await sendCloudTrialReminder('org-id', new Date('2026-09-24T00:00:00.000Z'));
+		await sendCloudTrialReminder('org-id', NOW);
 
 		expect(mocks.listAdmins).not.toHaveBeenCalled();
 		expect(mocks.claimReminder).not.toHaveBeenCalled();
@@ -179,62 +135,38 @@ describe('cloud billing lifecycle', () => {
 	});
 
 	it('releases the reminder when every admin email fails', async () => {
-		const now = new Date('2026-09-24T00:00:00.000Z');
-		const trialEndsAt = new Date('2026-09-27T00:00:00.000Z');
-		mocks.getOrganization.mockResolvedValue({
-			id: 'org-id',
-			name: 'Acme',
-			billingStatus: 'trialing',
-			stripeSubscriptionId: 'sub_cloud',
-			trialEndsAt,
-			trialReminderClaimedAt: null,
-		});
+		mocks.getOrganization.mockResolvedValue(billingOrganization());
 		mocks.listAdmins.mockResolvedValue([
 			{ email: 'admin@example.com', name: 'Admin', role: 'admin', status: 'active' },
 		]);
 		mocks.sendEmail.mockResolvedValue(false);
 
-		await sendCloudTrialReminder('org-id', now);
+		await sendCloudTrialReminder('org-id', NOW);
 
-		expect(mocks.releaseReminder).toHaveBeenCalledWith('org-id', trialEndsAt, now);
+		expect(mocks.releaseReminder).toHaveBeenCalledWith('org-id', TRIAL_ENDS_AT, NOW);
 	});
 
 	it('completes the reminder when at least one admin email is delivered', async () => {
-		mocks.getOrganization.mockResolvedValue({
-			id: 'org-id',
-			name: 'Acme',
-			billingStatus: 'trialing',
-			stripeSubscriptionId: 'sub_cloud',
-			trialEndsAt: new Date('2026-09-27T00:00:00.000Z'),
-			trialReminderClaimedAt: null,
-		});
+		mocks.getOrganization.mockResolvedValue(billingOrganization());
 		mocks.listAdmins.mockResolvedValue([
 			{ email: 'first@example.com', name: 'First', role: 'admin', status: 'active' },
 			{ email: 'second@example.com', name: 'Second', role: 'admin', status: 'active' },
 		]);
 		mocks.sendEmail.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
 
-		await sendCloudTrialReminder('org-id', new Date('2026-09-24T00:00:00.000Z'));
+		await sendCloudTrialReminder('org-id', NOW);
 
 		expect(mocks.releaseReminder).not.toHaveBeenCalled();
-		expect(mocks.completeReminder).toHaveBeenCalledWith(
-			'org-id',
-			new Date('2026-09-27T00:00:00.000Z'),
-			new Date('2026-09-24T00:00:00.000Z'),
-		);
+		expect(mocks.completeReminder).toHaveBeenCalledWith('org-id', TRIAL_ENDS_AT, NOW);
 	});
 
 	it('retries a reminder whose worker claim expired', async () => {
 		const now = new Date('2026-09-24T02:00:00.000Z');
-		const trialEndsAt = new Date('2026-09-27T00:00:00.000Z');
-		mocks.getOrganization.mockResolvedValue({
-			id: 'org-id',
-			name: 'Acme',
-			billingStatus: 'trialing',
-			stripeSubscriptionId: 'sub_cloud',
-			trialEndsAt,
-			trialReminderClaimedAt: new Date('2026-09-24T00:00:00.000Z'),
-		});
+		mocks.getOrganization.mockResolvedValue(
+			billingOrganization({
+				trialReminderClaimedAt: new Date('2026-09-24T00:00:00.000Z'),
+			}),
+		);
 		mocks.listAdmins.mockResolvedValue([
 			{ email: 'admin@example.com', name: 'Admin', role: 'admin', status: 'active' },
 		]);
@@ -243,30 +175,35 @@ describe('cloud billing lifecycle', () => {
 
 		expect(mocks.claimReminder).toHaveBeenCalledWith(
 			'org-id',
-			trialEndsAt,
+			TRIAL_ENDS_AT,
 			now,
 			new Date('2026-09-24T01:00:00.000Z'),
 		);
 		expect(mocks.sendEmail).toHaveBeenCalledOnce();
-		expect(mocks.completeReminder).toHaveBeenCalledWith('org-id', trialEndsAt, now);
+		expect(mocks.completeReminder).toHaveBeenCalledWith('org-id', TRIAL_ENDS_AT, now);
 	});
 
 	it('does not email when another worker already claimed the reminder', async () => {
-		mocks.getOrganization.mockResolvedValue({
-			id: 'org-id',
-			name: 'Acme',
-			billingStatus: 'trialing',
-			stripeSubscriptionId: 'sub_cloud',
-			trialEndsAt: new Date('2026-09-27T00:00:00.000Z'),
-			trialReminderClaimedAt: null,
-		});
+		mocks.getOrganization.mockResolvedValue(billingOrganization());
 		mocks.listAdmins.mockResolvedValue([
 			{ email: 'admin@example.com', name: 'Admin', role: 'admin', status: 'active' },
 		]);
 		mocks.claimReminder.mockResolvedValue(false);
 
-		await sendCloudTrialReminder('org-id', new Date('2026-09-24T00:00:00.000Z'));
+		await sendCloudTrialReminder('org-id', NOW);
 
 		expect(mocks.sendEmail).not.toHaveBeenCalled();
 	});
 });
+
+function billingOrganization(overrides: Record<string, unknown> = {}) {
+	return {
+		id: 'org-id',
+		name: 'Acme',
+		billingStatus: 'trialing',
+		stripeSubscriptionId: 'sub_cloud',
+		trialEndsAt: TRIAL_ENDS_AT,
+		trialReminderClaimedAt: null,
+		...overrides,
+	};
+}

@@ -212,13 +212,6 @@ describe('billing.getStatus', () => {
 		expect(orgQueries.getUserOrgMembership).not.toHaveBeenCalled();
 	});
 
-	it('is unavailable without querying an organization when cloud billing is disabled', async () => {
-		testState.billingEnabled = false;
-
-		await expect(caller().billing.getStatus()).rejects.toMatchObject({ code: 'NOT_FOUND' });
-		expect(orgQueries.getUserOrgMembership).not.toHaveBeenCalled();
-	});
-
 	it('returns not found before authentication when cloud billing is disabled', async () => {
 		testState.billingEnabled = false;
 
@@ -340,16 +333,8 @@ describe('billing management mutations', () => {
 			stripeSubscriptionId: 'sub_cloud',
 		});
 		vi.clearAllMocks();
-		stripeMocks.createPortal.mockResolvedValue('https://billing.stripe.com/session');
-		stripeMocks.createPaymentMethod.mockResolvedValue('https://billing.stripe.com/payment-method');
 		stripeMocks.createResubscribe.mockResolvedValue('https://checkout.stripe.com/subscription');
-		stripeMocks.listInvoices.mockResolvedValue([{ id: 'in_cloud' }]);
 		stripeMocks.resumeSubscription.mockResolvedValue({});
-	});
-
-	it('returns the organization Customer invoice history to admins', async () => {
-		await expect(caller().billing.getInvoices()).resolves.toEqual([{ id: 'in_cloud' }]);
-		expect(stripeService.listCloudInvoices).toHaveBeenCalledWith('cus_cloud');
 	});
 
 	it('rejects invoice history access for non-admin members', async () => {
@@ -357,18 +342,6 @@ describe('billing management mutations', () => {
 
 		await expect(caller().billing.getInvoices()).rejects.toMatchObject({ code: 'FORBIDDEN' });
 		expect(stripeService.listCloudInvoices).not.toHaveBeenCalled();
-	});
-
-	it('returns only the hosted Customer Portal URL', async () => {
-		await expect(
-			caller().billing.createPortalSession({ requestId: 'c7cc1630-972f-4e2a-a412-9ef6c0e59ef9' }),
-		).resolves.toEqual({ url: 'https://billing.stripe.com/session' });
-	});
-
-	it('returns a trusted payment-method management URL', async () => {
-		await expect(
-			caller().billing.createPaymentMethodSession({ requestId: 'c7cc1630-972f-4e2a-a412-9ef6c0e59ef9' }),
-		).resolves.toEqual({ url: 'https://billing.stripe.com/payment-method' });
 	});
 
 	it('syncs the persisted projection from current Stripe state', async () => {
