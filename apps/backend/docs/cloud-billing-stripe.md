@@ -26,22 +26,26 @@ When disabled, billing tRPC procedures return `NOT_FOUND`, raw Stripe routes and
 
 ```mermaid
 flowchart LR
-    Admin["Organization admin"]
-    Member["Organization member"]
-    Stripe["Stripe"]
-    Scheduler["Internal scheduler"]
+    subgraph People["Organization users"]
+        direction TB
+        Admin["Admin"]
+        Member["Member"]
+    end
 
     subgraph Browser["Cloud UI"]
+        direction TB
         BillingPage["Plan & Billing page"]
         AccessBanner["Trial and access banner"]
     end
 
     subgraph HTTP["HTTP boundaries"]
+        direction TB
         Router["billing tRPC router"]
         Webhook["POST /api/billing/stripe/webhook"]
     end
 
     subgraph Services["Billing services"]
+        direction TB
         Management["billing-management.service<br/>rechecks org admin in the database"]
         Gateway["stripe.service<br/>low-level Stripe gateway"]
         Reconciliation["billing-reconciliation.service"]
@@ -50,34 +54,38 @@ flowchart LR
     end
 
     subgraph Persistence["Local persistence"]
+        direction TB
         Organization[("organization")]
         Inbox[("stripe_webhook_event")]
         Jobs[("scheduled_job")]
     end
 
+    Stripe["Stripe"]
+    Scheduler["Internal scheduler"]
+
     Admin --> BillingPage
     Admin --> AccessBanner
     Member --> AccessBanner
-    BillingPage --> Router
-    AccessBanner --> Router
-    Router -->|"resolve membership"| Organization
+    BillingPage -->|"authenticated request"| Router
+    AccessBanner -->|"authenticated request"| Router
+    Router -->|"resolve organization membership"| Organization
     Router -->|"minimal entitlement summary"| Access
     Router -->|"admin management"| Management
-    Management --> Organization
+    Access -->|"read projection"| Organization
+    Management -->|"recheck admin and read IDs"| Organization
     Management --> Gateway
-    Stripe --> Webhook
-    Webhook -->|verify signature| Gateway
-    Webhook --> Inbox
-    Webhook --> Jobs
-    Scheduler --> Jobs
-    Jobs --> Reconciliation
-    Jobs --> Lifecycle
-    Reconciliation --> Gateway
-    Reconciliation --> Organization
-    Lifecycle --> Reconciliation
-    Lifecycle --> Organization
-    Access --> Organization
     Gateway <--> Stripe
+    Stripe -->|"signed event"| Webhook
+    Webhook -->|"verify signature"| Gateway
+    Webhook -->|"deduplicate event"| Inbox
+    Webhook -->|"enqueue unique job"| Jobs
+    Scheduler -->|"enqueue recurring job"| Jobs
+    Jobs -->|"webhook job"| Reconciliation
+    Jobs -->|"hourly job"| Lifecycle
+    Reconciliation --> Gateway
+    Reconciliation -->|"conditional projection update"| Organization
+    Lifecycle --> Reconciliation
+    Lifecycle -->|"claim reminders"| Organization
 ```
 
 There are two intentional trust paths. Interactive billing-management requests must pass both the tRPC admin middleware and the independent database-backed admin check in `billing-management.service.ts`. The member-readable entitlement summary does not expose Stripe or invoice data. Signed Stripe webhooks and internal scheduled jobs do not impersonate a user; they use the lower-level Stripe gateway and validate object ownership during reconciliation.
@@ -275,28 +283,38 @@ erDiagram
     }
 ```
 
+`STRIPE_WEBHOOK_EVENT` deliberately has no organization foreign key. The signed Event ID is the inbox identity; workers resolve and validate the organization from canonical Stripe state before updating the organization projection.
+
 Stripe owns Products, Customers, Subscriptions, Prices, Payment Methods, and Invoices. nao stores identifiers and a queryable projection, not copies of payment data:
 
 ```mermaid
 flowchart LR
-    Org["organization"]
-    Config["Server Price lookup key"]
-    Customer["Stripe Customer"]
-    Subscription["Stripe Subscription"]
-    Product["Stripe Product"]
-    Price["Stripe Prices<br/>current and historical"]
-    PaymentMethod["Stripe Payment Method"]
-    Invoice["Stripe Invoice"]
+    subgraph Nao["nao: identifiers and queryable projection"]
+        direction TB
+        Org[("organization")]
+        Config["Server Price lookup key"]
+    end
+
+    subgraph Stripe["Stripe: billing source of truth"]
+        direction TB
+        Customer["Customer"]
+        Subscription["Subscription"]
+        Product["Product"]
+        Price["Prices<br/>current and historical"]
+        PaymentMethod["Payment Method"]
+        Invoice["Invoice"]
+
+        Product -->|"has"| Price
+        Customer -->|"has"| PaymentMethod
+        Customer -->|"has"| Invoice
+        Customer -->|"has"| Subscription
+        Subscription -->|"references"| Price
+    end
 
     Org -->|"stripeCustomerId"| Customer
     Org -->|"stripeSubscriptionId"| Subscription
     Org -->|"stripePriceId"| Price
-    Config -->|"selects active Price"| Price
-    Product --> Price
-    Customer --> PaymentMethod
-    Customer --> Invoice
-    Customer --> Subscription
-    Subscription --> Price
+    Config -.->|"selects Price for new Checkout"| Price
 ```
 
 ## Organization resolution
@@ -345,48 +363,59 @@ The browser cannot select Stripe object IDs. The management service reloads the 
 
 ```mermaid
 flowchart LR
-    MemberGuard["Cloud billing enabled<br/>organization membership"]
-    AdminGuard["Admin authorization<br/>router + management service"]
+    MemberGuard["Feature flag +<br/>organization membership"]
+    AdminGuard["Router admin check +<br/>service admin recheck"]
 
-    AccessSummary["billing.getAccess"]
-    Status["billing.getStatus"]
-    StartTrial["billing.createTrialCheckoutSession"]
-    Invoices["billing.getInvoices"]
-    Sync["billing.syncStripeBilling"]
-    Checkout["billing.createLegacyTrialCheckoutSession"]
-    Portal["billing.createPortalSession"]
-    Payment["billing.createPaymentMethodSession"]
-    Resubscribe["billing.createResubscribeSession"]
-    Resume["billing.resumeSubscription"]
+    subgraph Procedures["tRPC procedures"]
+        direction TB
+        AccessSummary["getAccess"]
+        Status["getStatus"]
+        Invoices["getInvoices"]
+        Sync["syncStripeBilling"]
+        StartTrial["createTrialCheckoutSession"]
+        LegacyTrial["createLegacyTrialCheckoutSession"]
+        Portal["createPortalSession"]
+        Payment["createPaymentMethodSession"]
+        Resubscribe["createResubscribeSession"]
+        Resume["resumeSubscription"]
+    end
 
-    Organization[("organization projection")]
-    Reconcile["Reconciliation"]
-    CustomerAPI["Stripe Customers API"]
-    CheckoutAPI["Stripe Checkout Sessions API"]
-    PortalAPI["Stripe Billing Portal API"]
-    InvoiceAPI["Stripe Invoices API"]
-    SubscriptionAPI["Stripe Subscriptions API"]
+    subgraph Local["Local state"]
+        direction TB
+        Organization[("organization projection")]
+        Reconcile["Reconciliation service"]
+    end
+
+    subgraph Stripe["Stripe APIs"]
+        direction TB
+        Customers["Customers"]
+        Checkout["Checkout Sessions"]
+        BillingPortal["Billing Portal"]
+        StripeInvoices["Invoices"]
+        Subscriptions["Subscriptions"]
+    end
 
     MemberGuard --> AccessSummary --> Organization
     MemberGuard --> AdminGuard
     AdminGuard --> Status --> Organization
-    AdminGuard --> StartTrial
-    StartTrial --> Organization
-    StartTrial -->|"create if absent"| CustomerAPI
-    StartTrial --> CheckoutAPI
-    AdminGuard --> Invoices --> InvoiceAPI
+    AdminGuard --> Invoices --> StripeInvoices
     AdminGuard --> Sync --> Reconcile
-    AdminGuard --> Checkout
-    Checkout --> Organization
-    Checkout -->|"create if absent"| CustomerAPI
-    Checkout --> CheckoutAPI
-    AdminGuard --> Portal --> PortalAPI
-    AdminGuard --> Payment -->|"payment_method_update flow"| PortalAPI
+    AdminGuard --> StartTrial
+    AdminGuard --> LegacyTrial
+    AdminGuard --> Portal --> BillingPortal
+    AdminGuard --> Payment -->|"payment_method_update flow"| BillingPortal
     AdminGuard --> Resubscribe
-    Resubscribe --> SubscriptionAPI
-    Resubscribe --> CheckoutAPI
-    AdminGuard --> Resume --> SubscriptionAPI
-    Reconcile --> SubscriptionAPI
+    AdminGuard --> Resume --> Subscriptions
+
+    StartTrial --> Organization
+    StartTrial -->|"create if absent"| Customers
+    StartTrial --> Checkout
+    LegacyTrial --> Organization
+    LegacyTrial -->|"create if absent"| Customers
+    LegacyTrial --> Checkout
+    Resubscribe --> Subscriptions
+    Resubscribe --> Checkout
+    Reconcile --> Subscriptions
     Reconcile --> Organization
 ```
 
@@ -401,51 +430,64 @@ flowchart LR
 - `billing.createResubscribeSession` allows a new paid Checkout only after a canceled or incomplete-expired subscription.
 - `billing.resumeSubscription` resumes only a paused subscription with a usable default payment method.
 
+The two trial-entry procedures share the same Stripe history check but differ in which local state makes the organization eligible:
+
+```mermaid
+flowchart TD
+    TrialOperation{"Trial operation"}
+    NewEligibility{"Trial never started<br/>and no subscription ID?"}
+    HasSubscription{"Subscription ID exists?"}
+    LegacyTrialStarted{"Local trial already activated?"}
+    EnsureCustomer["Create or reuse Customer"]
+    History{"Any cloud subscription history?"}
+    Checkout["Create eligible trial Checkout"]
+    BadRequest["BAD_REQUEST"]
+    Conflict["CONFLICT"]
+
+    TrialOperation -->|createTrialCheckoutSession| NewEligibility
+    TrialOperation -->|createLegacyTrialCheckoutSession| HasSubscription
+    NewEligibility -->|Yes| EnsureCustomer
+    NewEligibility -->|No| BadRequest
+    HasSubscription -->|Yes| Conflict
+    HasSubscription -->|No| LegacyTrialStarted
+    LegacyTrialStarted -->|No| BadRequest
+    LegacyTrialStarted -->|Yes| EnsureCustomer
+    EnsureCustomer --> History
+    History -->|No| Checkout
+    History -->|Yes| Conflict
+```
+
+Existing Customer and Subscription operations stop before creating a session or mutating a subscription when their prerequisites are absent:
+
 ```mermaid
 flowchart TD
     Operation{"Admin operation"}
+    PortalReady{"Customer and subscription IDs?"}
+    PaymentReady{"Customer ID?"}
+    ResubscribeReady{"Customer and terminal<br/>subscription IDs?"}
+    CurrentSubscription{"Current cloud subscription exists?"}
+    Paused{"Subscription paused?"}
+    PaymentAvailable{"Default payment method?"}
+    BadRequest["BAD_REQUEST"]
+    Conflict["CONFLICT"]
 
-    Operation -->|getStatus| Status["Read local projection"]
-    Operation -->|createTrialCheckoutSession| TrialUnused{"Trial never started<br/>and no subscription?"}
-    TrialUnused -->|No| TrialConflict["BAD_REQUEST"]
-    TrialUnused -->|Yes| EnsureTrialCustomer["Create or reuse Customer"]
-    EnsureTrialCustomer --> TrialHistory{"Cloud subscription history exists?"}
-    TrialHistory -->|Yes| TrialConflict
-    TrialHistory -->|No| StartTrial["Create zero-due Checkout<br/>with 14-day trial"]
-    Operation -->|getInvoices| HasInvoiceCustomer{"Customer exists?"}
-    HasInvoiceCustomer -->|No| EmptyInvoices["Return empty list"]
-    HasInvoiceCustomer -->|Yes| ListInvoices["List Stripe invoices"]
-
-    Operation -->|syncStripeBilling| HasSyncCustomer{"Customer exists?"}
-    HasSyncCustomer -->|No| NotSynced["Return synced: false"]
-    HasSyncCustomer -->|Yes| SyncCustomer["Reconcile canonical Stripe state"]
-
-    Operation -->|createLegacyTrialCheckoutSession| HasSubscription{"Subscription ID exists?"}
-    HasSubscription -->|Yes| CheckoutConflict["CONFLICT"]
-    HasSubscription -->|No| TrialStarted{"Trial was activated?"}
-    TrialStarted -->|No| BadRequest
-    TrialStarted -->|Yes| EnsureCustomer["Create or reuse Customer"]
-    EnsureCustomer --> FirstHistory{"Cloud subscription history exists?"}
-    FirstHistory -->|Yes| CheckoutConflict
-    FirstHistory -->|No| InitialCheckout["Create initial Checkout"]
-
-    Operation -->|createPortalSession| PortalReady{"Customer and subscription exist?"}
-    PortalReady -->|No| BadRequest["BAD_REQUEST"]
+    Operation -->|createPortalSession| PortalReady
     PortalReady -->|Yes| GeneralPortal["Create general Portal session"]
+    PortalReady -->|No| BadRequest
 
-    Operation -->|createPaymentMethodSession| PaymentReady{"Customer exists?"}
+    Operation -->|createPaymentMethodSession| PaymentReady
+    PaymentReady -->|Yes| PaymentPortal["Create payment_method_update<br/>Portal session"]
     PaymentReady -->|No| BadRequest
-    PaymentReady -->|Yes| PaymentPortal["Create payment_method_update Portal session"]
 
-    Operation -->|createResubscribeSession| Terminal{"Customer and terminal subscription exist?"}
-    Terminal -->|No| BadRequest
-    Terminal -->|Yes| CurrentSubscription{"Any current cloud subscription?"}
-    CurrentSubscription -->|Yes| ResubscribeConflict["CONFLICT"]
-    CurrentSubscription -->|No| PaidCheckout["Create paid Checkout without trial"]
+    Operation -->|createResubscribeSession| ResubscribeReady
+    ResubscribeReady -->|No| BadRequest
+    ResubscribeReady -->|Yes| CurrentSubscription
+    CurrentSubscription -->|Yes| Conflict
+    CurrentSubscription -->|No| PaidCheckout["Create paid Checkout<br/>without trial"]
 
-    Operation -->|resumeSubscription| Paused{"Subscription is paused?"}
+    Operation -->|resumeSubscription| Paused
     Paused -->|No| BadRequest
-    Paused -->|Yes| PaymentAvailable{"Default payment method exists?"}
+    Paused -->|Yes| PaymentAvailable
     PaymentAvailable -->|No| BadRequest
     PaymentAvailable -->|Yes| Resume["Idempotently resume subscription"]
 ```
@@ -496,7 +538,7 @@ sequenceDiagram
     Management->>Stripe: List cloud subscription history
     alt Existing subscription history
         Stripe-->>Management: Existing subscriptions
-        Management-->>Router: Conflict; use recovery or resubscribe
+        Management-->>Router: Conflict — use recovery or resubscribe
     else First subscription
         Management->>Stripe: Create or reuse 14-day trial Checkout
         Stripe-->>Management: Hosted Checkout URL
@@ -636,9 +678,8 @@ An hourly lifecycle job reconciles every mapped organization in batches of five 
 flowchart TD
     Hourly["Hourly billing.lifecycle job"]
     Customers["List organizations with Stripe Customers"]
-    Batches["Split into batches of five"]
+    NextBatch{"Another batch?"}
     Reconcile["Reconcile each Customer concurrently"]
-    Continue{"More batches?"}
     Due["Find trials ending within three days"]
     Reread["Re-read billing state and active admins"]
     Claim{"Atomically claim reminder?"}
@@ -648,9 +689,10 @@ flowchart TD
     Release["Release exact claim for retry"]
     Done["Done"]
 
-    Hourly --> Customers --> Batches --> Reconcile --> Continue
-    Continue -->|Yes| Reconcile
-    Continue -->|No| Due
+    Hourly --> Customers --> NextBatch
+    NextBatch -->|"Yes: up to five Customers"| Reconcile
+    Reconcile --> NextBatch
+    NextBatch -->|No| Due
     Due --> Reread --> Claim
     Claim -->|No| Done
     Claim -->|Yes| Send --> Delivered
