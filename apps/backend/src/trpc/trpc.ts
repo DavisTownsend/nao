@@ -6,7 +6,7 @@ import superjson from 'superjson';
 import { getSession } from '../auth';
 import * as orgQueries from '../queries/organization.queries';
 import * as projectQueries from '../queries/project.queries';
-import { isGroupRoleMappingActive } from '../services/sso-group-mapping.service';
+import { isOrganizationRoleMappingActive } from '../services/sso-group-mapping.service';
 import { HandlerError } from '../utils/error';
 import { convertHeaders } from '../utils/utils';
 
@@ -19,6 +19,7 @@ export const createContext = async (opts: CreateFastifyContextOptions) => {
 	return {
 		session,
 		selectedProjectId: headers.get('x-nao-project-id'),
+		selectedOrganizationId: headers.get('x-nao-organization-id'),
 	};
 };
 
@@ -66,7 +67,11 @@ export const protectedProcedure = publicProcedure.use(async ({ ctx, next }) => {
 	return next({ ctx: { user: ctx.session.user } });
 });
 
-export async function resolveOrganizationMembership(userId: string, selectedProjectId: string | null) {
+export async function resolveOrganizationMembership(
+	userId: string,
+	selectedProjectId: string | null,
+	selectedOrganizationId?: string | null,
+) {
 	if (selectedProjectId) {
 		const membership = await orgQueries.getUserOrgMembershipByProject(userId, selectedProjectId);
 		if (!membership) {
@@ -75,7 +80,7 @@ export async function resolveOrganizationMembership(userId: string, selectedProj
 		return membership;
 	}
 
-	const membership = await orgQueries.getUserOrgMembership(userId);
+	const membership = await orgQueries.getUserOrgMembership(userId, selectedOrganizationId);
 	if (!membership) {
 		throw new TRPCError({ code: 'NOT_FOUND', message: 'You are not a member of any organization' });
 	}
@@ -166,12 +171,12 @@ export const contextAdminProtectedProcedure = projectProtectedProcedure.use(asyn
 	return next({ ctx: { project: ctx.project, userRole: ctx.userRole } });
 });
 
-/** Roles mapped from identity provider groups are re-applied on every sign-in, so manual edits would silently revert. */
-export async function assertRolesAreEditable(): Promise<void> {
-	if (await isGroupRoleMappingActive()) {
+/** Organization roles mapped from identity provider groups are re-applied on every sign-in. */
+export async function assertOrganizationRolesAreEditable(): Promise<void> {
+	if (await isOrganizationRoleMappingActive()) {
 		throw new TRPCError({
 			code: 'FORBIDDEN',
-			message: 'Roles are managed by your identity provider and cannot be changed here.',
+			message: 'Organization roles are managed by your identity provider and cannot be changed here.',
 		});
 	}
 }

@@ -75,7 +75,11 @@ export const gitlabRoutes = {
 				throw new TRPCError({ code: 'BAD_REQUEST', message: 'GitLab is not connected' });
 			}
 
-			const membership = await resolveOrganizationMembership(ctx.user.id, ctx.selectedProjectId);
+			const membership = await resolveOrganizationMembership(
+				ctx.user.id,
+				ctx.selectedProjectId,
+				ctx.selectedOrganizationId,
+			);
 			await assertOrganizationCloudBillingAccess(membership.orgId);
 
 			const cloneDir = createTempProjectDir('gitlab-import');

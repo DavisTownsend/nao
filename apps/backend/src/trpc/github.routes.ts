@@ -79,7 +79,11 @@ export const githubRoutes = {
 				throw new TRPCError({ code: 'BAD_REQUEST', message: 'GitHub is not connected' });
 			}
 
-			const membership = await resolveOrganizationMembership(ctx.user.id, ctx.selectedProjectId);
+			const membership = await resolveOrganizationMembership(
+				ctx.user.id,
+				ctx.selectedProjectId,
+				ctx.selectedOrganizationId,
+			);
 			await assertOrganizationCloudBillingAccess(membership.orgId);
 
 			const cloneDir = createTempProjectDir('github-import');

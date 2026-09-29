@@ -37,7 +37,11 @@ const cloudBillingProcedure = publicProcedure.use(async ({ ctx, next }) => {
 });
 
 const cloudBillingMemberProcedure = cloudBillingProcedure.use(async ({ ctx, next }) => {
-	const membership = await resolveOrganizationMembership(ctx.user.id, ctx.selectedProjectId);
+	const membership = await resolveOrganizationMembership(
+		ctx.user.id,
+		ctx.selectedProjectId,
+		ctx.selectedOrganizationId,
+	);
 
 	return next({
 		ctx: {

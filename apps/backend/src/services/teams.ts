@@ -244,6 +244,7 @@ class TeamsService {
 				role: 'user',
 				parts: [{ type: 'text', text }],
 				chatId: existingChat.id,
+				senderUserId: ctx.user!.id,
 				source: 'teams',
 			});
 			ctx.chatId = existingChat.id;

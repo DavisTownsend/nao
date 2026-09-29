@@ -75,6 +75,13 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
 
 	// ── Organization ─────────────────────────────────────────
 	{
+		page: '/settings/organization',
+		pageLabel: 'Organization Settings',
+		title: 'Switch organization',
+		description: 'Choose which organization to manage.',
+		keywords: ['change organization', 'organization selector', 'workspace'],
+	},
+	{
 		page: '/settings/organization/members',
 		pageLabel: 'Members',
 		title: 'Members',
@@ -476,6 +483,28 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
 	{
 		page: '/settings/project/agent',
 		pageLabel: 'Agent',
+		section: 'Capabilities',
+		search: { tab: 'tools' },
+		title: 'Sandbox secrets',
+		description:
+			'API keys and other credentials the code running in a sandbox can read as environment variables, without exposing them to the model.',
+		keywords: [
+			'secret',
+			'secrets',
+			'api key',
+			'token',
+			'credential',
+			'env',
+			'environment variable',
+			'sandbox',
+			'boxlite',
+			'code execution',
+			'password',
+		],
+	},
+	{
+		page: '/settings/project/agent',
+		pageLabel: 'Agent',
 		section: 'Experimental',
 		search: { tab: 'tools' },
 		title: 'Display map',
@@ -850,6 +879,45 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
 		description: 'Manage the members of your project.',
 		keywords: ['users', 'invite', 'add member', 'roles', 'project members'],
 	},
+	{
+		page: '/settings/project/user-groups',
+		pageLabel: 'User Groups',
+		title: 'User Groups',
+		description:
+			'Assign project users to groups and configure which features, database tables, and docs they can use.',
+		keywords: ['users', 'groups', 'permissions', 'features', 'context', 'schemas', 'tables', 'docs', 'enterprise'],
+		adminOnly: true,
+	},
+	{
+		page: '/settings/project/user-groups',
+		pageLabel: 'User Groups',
+		section: 'Users',
+		search: { tab: 'users' },
+		title: 'Users',
+		description: 'Assign project users to groups.',
+		keywords: ['members', 'roles', 'memberships', 'permissions'],
+		adminOnly: true,
+	},
+	{
+		page: '/settings/project/user-groups',
+		pageLabel: 'User Groups',
+		section: 'Manage Groups',
+		search: { tab: 'groups' },
+		title: 'Manage Groups',
+		description: 'Configure which features, database tables, and docs each group can use.',
+		keywords: ['groups', 'permissions', 'features', 'context', 'schemas', 'tables', 'docs'],
+		adminOnly: true,
+	},
+	{
+		page: '/settings/project/user-groups',
+		pageLabel: 'User Groups',
+		section: 'Security',
+		search: { tab: 'security' },
+		title: 'Row-level security',
+		description: 'Mark sensitive tables and choose the constraint columns group row policies may use.',
+		keywords: ['security', 'rows', 'rls', 'predicates', 'where', 'constraint columns', 'sensitive tables'],
+		adminOnly: true,
+	},
 
 	// ── Usage & Costs ────────────────────────────────────────
 	{
@@ -874,6 +942,14 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
 		title: 'Cost',
 		description: 'Estimated cost in USD based on token usage and model pricing.',
 		keywords: ['price', 'billing', 'expense', 'spending'],
+		adminOnly: true,
+	},
+	{
+		page: '/settings/usage',
+		pageLabel: 'Usage, costs & replay',
+		title: 'Split per user',
+		description: 'Break down messages, tokens and cost per user instead of per source or token category.',
+		keywords: ['per user', 'by user', 'user breakdown', 'who spends', 'top users', 'split'],
 		adminOnly: true,
 	},
 	{

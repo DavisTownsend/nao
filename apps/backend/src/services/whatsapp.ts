@@ -309,6 +309,7 @@ class WhatsappService {
 				role: 'user',
 				parts: [{ type: 'text', text }, ...imageParts],
 				chatId: existingChat.id,
+				senderUserId: ctx.user!.id,
 				source: 'whatsapp',
 			});
 			ctx.chatId = existingChat.id;

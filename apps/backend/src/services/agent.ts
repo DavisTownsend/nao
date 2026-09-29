@@ -64,6 +64,7 @@ import {
 	resolveProviderSettings,
 } from '../utils/llm';
 import { logger } from '../utils/logger';
+import { sanitizeToolCallIds } from '../utils/model-message';
 import { extractConfiguredDatabases, readProjectContext } from '../utils/nao-config';
 import { addPromptCache, cachedSystemInstructions } from '../utils/prompt-cache';
 import { scheduleSaveLlmInferenceRecord } from '../utils/schedule-task';
@@ -77,10 +78,17 @@ import { hasFeature, LICENSE_FEATURES } from './license.service';
 import { mcpService } from './mcp';
 import { memoryService } from './memory';
 import { getAzureAccessTokenForUser } from './microsoft-auth.service';
+import { sandboxSecretService } from './sandbox-secret.service';
 import { resolveSemanticLayerMode } from './semantic-layer.service';
 import { skillService } from './skill';
 import { canGrepUserFiles } from './storage/user-files';
 import { getStoryTemplateWarnings } from './story-template-validation';
+import { resolveProjectContextAccess } from './user-group-context-access.service';
+import {
+	type AgentUserGroupAccess,
+	appendAgentUserGroupRestrictions,
+	resolveAgentUserGroupAccess,
+} from './user-group-feature-access.service';
 
 export interface AgentRunResult {
 	text: string;
@@ -120,6 +128,10 @@ export interface AgentToolsContext {
 
 /** Builds the tool set a run should expose. Callers pass one to `create` to customise tools. */
 export type AgentToolsResolver = (context: AgentToolsContext) => AgentTools | Promise<AgentTools>;
+
+export function shouldAddStoryMode(mentions: Mention[] | undefined, access: AgentUserGroupAccess): boolean {
+	return access.features.storyCreation && Boolean(mentions?.some((mention) => mention.id === story.MENTION_ID));
+}
 
 /** Default tool set for interactive runs: all built-ins, MCP tools and web search. */
 export const defaultAgentTools: AgentToolsResolver = ({
@@ -192,7 +204,11 @@ export async function buildMcpToolContext(opts: {
 	agentSettings?: AgentSettings | null;
 }): Promise<McpToolContext> {
 	const base = await _buildContextBase({ ...opts, supportsCustomCharts: false });
-	return { ...base, chatId: null };
+	return {
+		...base,
+		chatId: null,
+		storyCreationEnabled: base.userGroupFeatures.includes('storyCreation'),
+	};
 }
 
 async function _buildContextBase(opts: {
@@ -207,9 +223,10 @@ async function _buildContextBase(opts: {
 	}
 	const agentSettings =
 		opts.agentSettings !== undefined ? opts.agentSettings : await projectQueries.getAgentSettings(opts.projectId);
-	const [envVars, azureAccessToken] = await Promise.all([
+	const [envVars, azureAccessToken, contextAccess] = await Promise.all([
 		projectQueries.getEnvVars(opts.projectId),
 		hasFeature(LICENSE_FEATURES.sso).then((has) => (has ? getAzureAccessTokenForUser(opts.userId) : null)),
+		resolveProjectContextAccess(opts.projectId, opts.userId, project.path),
 	]);
 	return {
 		projectFolder: project.path,
@@ -219,6 +236,11 @@ async function _buildContextBase(opts: {
 		agentSettings,
 		semanticLayerMode: resolveSemanticLayerMode(project.path, agentSettings),
 		envVars,
+		warehouseTableAccess: contextAccess.warehouseTableAccess,
+		warehouseRowSecurity: contextAccess.warehouseRowSecurity,
+		docsContextAccess: contextAccess.docsContextAccess,
+		userGroupFeatures: contextAccess.userGroupFeatures,
+		userRulesGroupAccess: contextAccess.userRulesGroupAccess,
 		azureAccessToken,
 		queryResults: new Map(),
 		generatedArtifacts: { charts: [], maps: [], stories: [] },
@@ -297,7 +319,9 @@ export class AgentService {
 		});
 		const webTools = await this._resolveWebTools(chat.projectId, resolvedLlmSelectedModel.provider, agentSettings);
 		const resolveTools = options.tools ?? defaultAgentTools;
-		const agentTools = await resolveTools({ chat, agentSettings, toolContext, webTools, customBoundaries });
+		const resolvedTools = await resolveTools({ chat, agentSettings, toolContext, webTools, customBoundaries });
+		const userGroupAccess = resolveAgentUserGroupAccess(toolContext.userGroupFeatures, resolvedTools);
+		const agentTools = resolvedTools;
 		const stopWhen: StopCondition<AgentTools>[] = options.excludeFollowUps
 			? [stepCountIs(options.maxSteps ?? 20)]
 			: chat.testMode
@@ -311,6 +335,7 @@ export class AgentService {
 			new AbortController(),
 			agentTools,
 			toolContext,
+			userGroupAccess,
 			stopWhen,
 			options.systemPrompt,
 		);
@@ -394,6 +419,7 @@ class AgentManager {
 		private readonly _abortController: AbortController,
 		private readonly _agentTools: AgentTools,
 		private readonly _toolContext: ToolContext,
+		private readonly _userGroupAccess: AgentUserGroupAccess,
 		stopWhen: StopCondition<AgentTools>[] = [hasToolCall('suggest_follow_ups'), hasToolCall('clarification')],
 		private readonly _systemPromptOverride?: string,
 	) {
@@ -566,6 +592,7 @@ class AgentManager {
 					await chatQueries.upsertMessage({
 						...settledMessage,
 						chatId: this.chat.id,
+						senderUserId: this.chat.userId,
 						source: this._toolContext.adminMode ? 'admin' : settledMessage.source,
 						stopReason,
 						error,
@@ -600,7 +627,9 @@ class AgentManager {
 		const uiMessagesWithCompaction = compactionService.useLastCompaction(uiMessagesWithDbContext);
 		const uiMessagesWithResolvedAttachments = await resolveAttachments(uiMessagesWithCompaction);
 
-		const systemPrompt = this._systemPromptOverride ?? (await this._buildSystemPrompt(provider, timezone, chatUrl));
+		const selectedSystemPrompt =
+			this._systemPromptOverride ?? (await this._buildSystemPrompt(provider, timezone, chatUrl));
+		const systemPrompt = appendAgentUserGroupRestrictions(selectedSystemPrompt, this._userGroupAccess);
 		this._systemPrompt = systemPrompt;
 		const conversationMessages = uiMessagesWithResolvedAttachments.filter((message) => message.role !== 'system');
 
@@ -608,7 +637,7 @@ class AgentManager {
 			tools: this._agentTools,
 		});
 
-		return modelMessages;
+		return sanitizeToolCallIds(modelMessages);
 	}
 
 	private async _buildSystemPrompt(provider?: Provider, timezone?: string, chatUrl?: string): Promise<string> {
@@ -623,7 +652,7 @@ class AgentManager {
 
 	private async _buildDefaultSystemPrompt(provider?: Provider, timezone?: string, chatUrl?: string): Promise<string> {
 		const memories = await memoryService.safeGetUserMemories(this.chat.userId, this.chat.projectId, this.chat.id);
-		const userRules = getUserRules(this._toolContext.projectFolder);
+		const userRules = getUserRules(this._toolContext.projectFolder, this._toolContext.userRulesGroupAccess);
 		const connections = getConnections(this._toolContext.projectFolder);
 		const configuredDatabases = extractConfiguredDatabases(this._toolContext.projectFolder);
 		const { repos, templates, presence: contextPresence } = readProjectContext(this._toolContext.projectFolder);
@@ -632,7 +661,13 @@ class AgentManager {
 		const customCharts = this._toolContext.supportsCustomCharts
 			? listChartPlugins(this._toolContext.projectFolder)
 			: [];
-		const mcpServers = await mcpService.getEnabledServers(this.chat.projectId);
+		const toolNames = Object.keys(this._agentTools);
+		const [mcpServers, sandboxSecrets] = await Promise.all([
+			mcpService.getEnabledServers(this.chat.projectId),
+			toolNames.includes('execute_sandboxed_code')
+				? sandboxSecretService.safeListDefinitions(this.chat.userId, this.chat.projectId)
+				: Promise.resolve([]),
+		]);
 		const basePrompt = renderToMarkdown(
 			SystemPrompt({
 				memories,
@@ -642,13 +677,14 @@ class AgentManager {
 				skills,
 				customCharts,
 				mcpServers,
+				sandboxSecrets,
 				semanticLayerMode: this._toolContext.semanticLayerMode,
 				templates,
 				repoNames,
 				contextPresence,
 				timezone,
 				testMode: this.chat.testMode,
-				toolNames: Object.keys(this._agentTools),
+				toolNames,
 				options: { canGrepSavedFiles: canGrepUserFiles() },
 			}),
 		);
@@ -930,7 +966,7 @@ class AgentManager {
 	}
 
 	private _addStoryMode(messages: UIMessage[], mentions?: Mention[]): UIMessage[] {
-		if (!mentions?.some((m) => m.id === story.MENTION_ID)) {
+		if (!shouldAddStoryMode(mentions, this._userGroupAccess)) {
 			return messages;
 		}
 
@@ -971,7 +1007,11 @@ class AgentManager {
 
 		const contextParts: string[] = [];
 		for (const mention of dbMentions) {
-			const content = getTableColumnsContent(this._toolContext.projectFolder, mention.id);
+			const content = getTableColumnsContent(
+				this._toolContext.projectFolder,
+				mention.id,
+				this._toolContext.warehouseTableAccess,
+			);
 			if (content) {
 				contextParts.push(`[Table: ${mention.id}]\n${content}`);
 			}

@@ -25,9 +25,11 @@ import { mcpRoutes } from './mcp.routes';
 import { mcpEndpointRoutes } from './mcp-endpoint.routes';
 import { mcpOAuthClientsRoutes } from './mcp-oauth-clients.routes';
 import { memoryRoutes } from './memory.routes';
+import { notificationRoutes } from './notification.routes';
 import { organizationRoutes } from './organization.routes';
 import { posthogRoutes } from './posthog.routes';
 import { projectRoutes } from './project.routes';
+import { sandboxSecretRoutes } from './sandbox-secret.routes';
 import { sharedChatRoutes } from './shared-chat.routes';
 import { sharedStoryRoutes } from './shared-story.routes';
 import { skillRoutes } from './skill.routes';
@@ -40,6 +42,7 @@ import { transcribeRoutes } from './transcribe.routes';
 import { router } from './trpc';
 import { usageRoutes } from './usage.routes';
 import { userRoutes } from './user.routes';
+import { userGroupRoutes } from './user-group.routes';
 
 export const trpcRouter = router({
 	analyticsEvent: analyticsEventRoutes,
@@ -72,7 +75,9 @@ export const trpcRouter = router({
 	storyFolder: storyFolderRoutes,
 	usage: usageRoutes,
 	user: userRoutes,
+	userGroup: userGroupRoutes,
 	memory: memoryRoutes,
+	notification: notificationRoutes,
 	organization: organizationRoutes,
 	authConfig: authConfigRoutes,
 	account: accountRoutes,
@@ -80,6 +85,7 @@ export const trpcRouter = router({
 	mcp: mcpRoutes,
 	mcpEndpoint: mcpEndpointRoutes,
 	mcpOAuthClients: mcpOAuthClientsRoutes,
+	sandboxSecret: sandboxSecretRoutes,
 	system: systemRoutes,
 	skill: skillRoutes,
 	transcribe: transcribeRoutes,

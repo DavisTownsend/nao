@@ -6,7 +6,11 @@ import { generateApiKey } from '../services/api-key.service';
 import { protectedProcedure, resolveOrganizationMembership } from './trpc';
 
 const orgAdminProcedure = protectedProcedure.use(async ({ ctx, next }) => {
-	const membership = await resolveOrganizationMembership(ctx.user.id, ctx.selectedProjectId);
+	const membership = await resolveOrganizationMembership(
+		ctx.user.id,
+		ctx.selectedProjectId,
+		ctx.selectedOrganizationId,
+	);
 	if (membership.role !== 'admin') {
 		throw new TRPCError({ code: 'FORBIDDEN', message: 'Only organization admins can manage API keys' });
 	}
