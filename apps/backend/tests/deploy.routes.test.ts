@@ -43,6 +43,7 @@ describe('deploy route cloud billing access', () => {
 			{ status },
 		);
 
+		expect(mocks.validateApiKey).toHaveBeenCalledWith('nao_valid');
 		expect(file).toHaveBeenCalledOnce();
 		expect(status).toHaveBeenCalledWith(400);
 		expect(send).toHaveBeenCalledWith({ error: 'No file uploaded. Send a tar.gz as multipart field "context".' });

@@ -69,11 +69,13 @@ vi.mock('../src/utils/story-query-data', () => ({
 }));
 
 import { assertProjectCloudBillingAccess } from '../src/services/cloud-billing-access.service';
+import { resolveExcludedColumnEnforcementForProject } from '../src/services/excluded-columns.service';
 import { executeLiveQuery, executeRawSql, refreshStoryData } from '../src/services/live-story';
 
 describe('live story SQL execution', () => {
 	beforeEach(() => {
 		vi.resetAllMocks();
+		vi.mocked(resolveExcludedColumnEnforcementForProject).mockResolvedValue(false);
 		mocks.getChatInfo.mockResolvedValue({
 			projectId: 'project-1',
 			userId: 'user-1',
@@ -154,10 +156,12 @@ describe('live story SQL execution', () => {
 		});
 
 		expect(mocks.queryAppDb).not.toHaveBeenCalled();
+		expect(assertProjectCloudBillingAccess).toHaveBeenCalledOnce();
 		expect(fetchMock).toHaveBeenCalledOnce();
 		expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
 			sql: 'SELECT * FROM orders',
 			nao_project_folder: '/project',
+			enforce_excluded_columns: false,
 			database_id: 'analytics',
 			env_vars: { TOKEN: 'secret' },
 		});

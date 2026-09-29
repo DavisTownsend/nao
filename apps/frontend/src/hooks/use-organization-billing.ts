@@ -229,6 +229,7 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 		},
 		retryCheckoutConfirmation: () => {
 			setIsCheckoutPolling(true);
+			syncStripeBilling.mutate();
 			void billing.refetch();
 		},
 	};

@@ -56,7 +56,7 @@ export async function executeLiveQuery(
 	}
 
 	const envVars = await projectQueries.getEnvVars(projectId);
-	return executeRawSql(sqlQuery, {
+	return executeBillingValidatedRawSql(sqlQuery, {
 		projectFolder: project.path,
 		projectId,
 		databaseId: query.databaseId,
@@ -102,7 +102,7 @@ export async function refreshStoryData(chatId: string, slug: string): Promise<Re
 			}
 
 			const projectEnvVars = await projectQueries.getEnvVars(chat.projectId);
-			const result = await executeRawSql(effectiveSql, {
+			const result = await executeBillingValidatedRawSql(effectiveSql, {
 				projectFolder: project!.path!,
 				projectId: chat.projectId,
 				databaseId,
@@ -184,6 +184,13 @@ export async function executeRawSql(
 	options: RawSqlExecutionOptions,
 ): Promise<{ data: unknown[]; columns: string[] }> {
 	await assertProjectCloudBillingAccess(options.projectId);
+	return executeBillingValidatedRawSql(sqlQuery, options);
+}
+
+async function executeBillingValidatedRawSql(
+	sqlQuery: string,
+	options: RawSqlExecutionOptions,
+): Promise<{ data: unknown[]; columns: string[] }> {
 	const enforceExcludedColumns = await resolveExcludedColumnEnforcementForProject(options.projectId);
 	const response = await fetch(`http://localhost:${env.FASTAPI_PORT}/execute_sql`, {
 		method: 'POST',
