@@ -122,31 +122,6 @@ export function isHistoricalBillingStatus(status: string | null | undefined): bo
 	return status === 'canceled' || status === 'incomplete_expired';
 }
 
-export function formatBillingRenewal(status: string | null, cancellationScheduled: boolean): string {
-	if (cancellationScheduled && status !== 'canceled') {
-		return 'Will not renew';
-	}
-	switch (status) {
-		case 'trialing':
-			return 'Starts after trial';
-		case 'active':
-		case 'past_due':
-			return 'Renews automatically';
-		case 'paused':
-			return 'Paused';
-		case 'canceled':
-			return 'Ended';
-		case 'unpaid':
-			return 'Payment stopped';
-		case 'incomplete':
-			return 'Pending setup';
-		case 'incomplete_expired':
-			return 'Expired';
-		default:
-			return '—';
-	}
-}
-
 export function formatBillingPrice(amount: number, currency: string): string {
 	const fractionDigits = amount % 100 === 0 ? 0 : 2;
 	return new Intl.NumberFormat(undefined, {

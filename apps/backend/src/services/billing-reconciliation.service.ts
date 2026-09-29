@@ -2,6 +2,7 @@ import type Stripe from 'stripe';
 
 import * as billingQueries from '../queries/billing.queries';
 import * as organizationQueries from '../queries/organization.queries';
+import { isTerminalBillingStatus } from '../types/billing';
 import { cloudSubscriptionProjection, hasCloudDefaultPaymentMethod, listCloudSubscriptions } from './stripe.service';
 
 interface CloudBillingReconciliationResult {
@@ -66,7 +67,7 @@ async function resolveOrganization(stripeCustomerId: string, organizationIdHint?
 }
 
 function selectCloudSubscription(subscriptions: Stripe.Subscription[]): Stripe.Subscription | null {
-	const current = subscriptions.filter((subscription) => !isTerminalSubscription(subscription));
+	const current = subscriptions.filter((subscription) => !isTerminalBillingStatus(subscription.status));
 	if (current.length > 1) {
 		throw new Error('Stripe Customer has multiple current cloud subscriptions');
 	}
@@ -91,8 +92,4 @@ function assertSubscriptionOwnership(
 	if (metadataOrganizationId && metadataOrganizationId !== organizationId) {
 		throw new Error(`Stripe Subscription "${subscription.id}" organization metadata does not match`);
 	}
-}
-
-function isTerminalSubscription(subscription: Stripe.Subscription): boolean {
-	return subscription.status === 'canceled' || subscription.status === 'incomplete_expired';
 }

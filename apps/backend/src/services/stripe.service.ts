@@ -1,7 +1,12 @@
 import Stripe from 'stripe';
 
 import { env, isCloudBillingEnabled } from '../env';
-import { BillingStatus, CLOUD_MONTHLY_PLAN, type CloudBillingPlan } from '../types/billing';
+import {
+	type BillingStatus,
+	CLOUD_MONTHLY_PLAN,
+	type CloudBillingPlan,
+	isTerminalBillingStatus,
+} from '../types/billing';
 
 const STRIPE_API_VERSION: Stripe.LatestApiVersion = '2026-08-26.dahlia';
 const STRIPE_CHECKOUT_MIN_TRIAL_MS = 48 * 60 * 60 * 1000;
@@ -92,7 +97,7 @@ export async function createCloudResubscribeSession(input: {
 	stripeCustomerId: string;
 }): Promise<string> {
 	const subscriptions = await listCloudSubscriptions(input.stripeCustomerId);
-	if (subscriptions.some((subscription) => !isTerminalSubscription(subscription))) {
+	if (subscriptions.some((subscription) => !isTerminalBillingStatus(subscription.status))) {
 		throw new CloudSubscriptionUnavailableError('This organization already has a current subscription');
 	}
 	const latestSubscription = [...subscriptions].sort((left, right) => right.created - left.created)[0];
@@ -229,11 +234,14 @@ export async function createCloudPaymentMethodSession(input: {
 }
 
 export async function listCloudInvoices(stripeCustomerId: string): Promise<CloudInvoice[]> {
-	const invoices = await getStripeClient().invoices.list({
+	const invoices: Stripe.Invoice[] = [];
+	for await (const invoice of getStripeClient().invoices.list({
 		customer: stripeCustomerId,
 		limit: 100,
-	});
-	return invoices.data.map((invoice) => ({
+	})) {
+		invoices.push(invoice);
+	}
+	return invoices.map((invoice) => ({
 		id: invoice.id,
 		number: invoice.number,
 		invoiceKind: invoice.billing_reason === 'subscription_create' && invoice.total === 0 ? 'trial' : 'subscription',
@@ -462,10 +470,6 @@ function hasProduct(subscription: Stripe.Subscription, productId: string): boole
 	return subscription.items.data.some(
 		(item) => stripeProductId(item.price.product) === productId && item.quantity === 1,
 	);
-}
-
-function isTerminalSubscription(subscription: Stripe.Subscription): boolean {
-	return subscription.status === 'canceled' || subscription.status === 'incomplete_expired';
 }
 
 function stripeCustomerId(customer: string | Stripe.Customer | Stripe.DeletedCustomer): string {

@@ -77,6 +77,27 @@ describe('cloud billing reconciliation', () => {
 		);
 	});
 
+	it('prefers live subscription trial dates over persisted history', async () => {
+		const trialStartedAt = new Date('2026-02-01T00:00:00.000Z');
+		const trialEndsAt = new Date('2026-02-15T00:00:00.000Z');
+		mocks.listSubscriptions.mockResolvedValue([buildSubscription()]);
+		mocks.subscriptionProjection.mockResolvedValue({
+			billingStatus: 'trialing',
+			stripeCustomerId: 'cus_cloud',
+			stripeSubscriptionId: 'sub_active',
+			trialStartedAt,
+			trialEndsAt,
+		});
+
+		await reconcileCloudBillingCustomer({ stripeCustomerId: 'cus_cloud' });
+
+		expect(mocks.updateSubscription).toHaveBeenCalledWith(
+			'org-id',
+			'sync-token',
+			expect.objectContaining({ trialStartedAt, trialEndsAt }),
+		);
+	});
+
 	it('selects the newest terminal subscription when no current subscription exists', async () => {
 		mocks.listSubscriptions.mockResolvedValue([
 			buildSubscription({ id: 'sub_newer', status: 'canceled', created: 20 }),
@@ -112,6 +133,22 @@ describe('cloud billing reconciliation', () => {
 		await reconcileCloudBillingCustomer({
 			stripeCustomerId: 'cus_cloud',
 			organizationIdHint: 'stale-event-org',
+		});
+
+		expect(mocks.getOrganizationById).toHaveBeenCalledWith('org-id');
+		expect(mocks.attachCustomer).toHaveBeenCalledWith('org-id', 'cus_cloud');
+	});
+
+	it('uses the organization hint when an unmapped Customer has no subscriptions', async () => {
+		const organization = buildOrganization({ stripeCustomerId: null });
+		mocks.getOrganizationByCustomer.mockResolvedValue(null);
+		mocks.getOrganizationById.mockResolvedValue(organization);
+		mocks.attachCustomer.mockResolvedValue(buildOrganization());
+		mocks.listSubscriptions.mockResolvedValue([]);
+
+		await reconcileCloudBillingCustomer({
+			stripeCustomerId: 'cus_cloud',
+			organizationIdHint: 'org-id',
 		});
 
 		expect(mocks.getOrganizationById).toHaveBeenCalledWith('org-id');

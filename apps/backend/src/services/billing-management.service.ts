@@ -2,7 +2,7 @@ import type { DBOrganization } from '../db/abstractSchema';
 import * as billingQueries from '../queries/billing.queries';
 import * as organizationQueries from '../queries/organization.queries';
 import * as userQueries from '../queries/user.queries';
-import { CLOUD_MONTHLY_PLAN } from '../types/billing';
+import { CLOUD_MONTHLY_PLAN, isTerminalBillingStatus } from '../types/billing';
 import { HandlerError } from '../utils/error';
 import { reconcileCloudBillingCustomer } from './billing-reconciliation.service';
 import {
@@ -118,7 +118,7 @@ export async function createCloudResubscribeForAdmin(input: AdminBillingInput): 
 	if (
 		!organization.stripeCustomerId ||
 		!organization.stripeSubscriptionId ||
-		!['canceled', 'incomplete_expired'].includes(organization.billingStatus ?? '')
+		!isTerminalBillingStatus(organization.billingStatus)
 	) {
 		throw new CloudBillingManagementInputError('A new subscription is not available');
 	}

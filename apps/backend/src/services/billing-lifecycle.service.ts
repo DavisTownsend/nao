@@ -49,7 +49,7 @@ export async function sendCloudTrialReminder(organizationId: string, now = new D
 				emailService.sendEmail(admin.email, buildCloudTrialEndingEmail(admin, organization.name, trialEndsAt)),
 			),
 		);
-		if (delivered.some(Boolean)) {
+		if (delivered.every(Boolean)) {
 			await billingQueries.completeTrialReminder(organization.id, trialEndsAt, now);
 			return;
 		}

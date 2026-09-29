@@ -404,6 +404,7 @@ function ChatInputBase({
 				canManageBilling={billingAccess.data.canManageBilling}
 				trialAvailable={billingAccess.data.trialAvailable}
 				className={className}
+				onCancel={onCancel}
 			/>
 		);
 	}
@@ -522,10 +523,12 @@ function ChatCloudAccessRestricted({
 	canManageBilling,
 	trialAvailable,
 	className,
+	onCancel,
 }: {
 	canManageBilling: boolean;
 	trialAvailable: boolean;
 	className?: string;
+	onCancel?: () => void;
 }) {
 	return (
 		<div className={cn('px-3 pb-3 pt-0 md:px-4 md:pb-4 max-w-3xl w-full mx-auto', className)}>
@@ -542,6 +545,11 @@ function ChatCloudAccessRestricted({
 							: 'An active trial or subscription is required to run agents.'}
 					</p>
 				</div>
+				{onCancel && (
+					<Button type='button' size='sm' variant='ghost' onClick={onCancel}>
+						Cancel
+					</Button>
+				)}
 				{canManageBilling ? (
 					<Button asChild size='sm' variant='secondary'>
 						<Link to='/settings/organization/billing' search={{ checkout: undefined, portal: undefined }}>

@@ -38,12 +38,39 @@ describe('Stripe webhook route', () => {
 		await stripeWebhookRoutes({ post: testMocks.post } as never);
 	});
 
+	it.each([
+		['signature header', { headers: {}, rawBody: '{}' }],
+		['raw body', { headers: { 'stripe-signature': 'valid' } }],
+	])('rejects a missing %s without verifying or persisting work', async (_missingField, request) => {
+		const response = await handler()(request, reply());
+
+		expect(response.statusCode).toBe(400);
+		expect(testMocks.constructEventAsync).not.toHaveBeenCalled();
+		expect(testMocks.insertEvent).not.toHaveBeenCalled();
+		expect(testMocks.enqueueOnce).not.toHaveBeenCalled();
+	});
+
 	it('rejects an invalid signature without persisting work', async () => {
 		testMocks.constructEventAsync.mockImplementation(() => {
 			throw new Error('invalid signature');
 		});
 
 		const response = await handler()({ headers: { 'stripe-signature': 'invalid' }, rawBody: '{}' }, reply());
+
+		expect(response.statusCode).toBe(400);
+		expect(testMocks.insertEvent).not.toHaveBeenCalled();
+		expect(testMocks.enqueueOnce).not.toHaveBeenCalled();
+	});
+
+	it('rejects live events outside production without persisting work', async () => {
+		testMocks.constructEventAsync.mockResolvedValue({
+			id: 'evt_live',
+			type: 'checkout.session.completed',
+			livemode: true,
+			data: { object: { id: 'cs_live' } },
+		});
+
+		const response = await handler()({ headers: { 'stripe-signature': 'valid' }, rawBody: '{}' }, reply());
 
 		expect(response.statusCode).toBe(400);
 		expect(testMocks.insertEvent).not.toHaveBeenCalled();
@@ -79,7 +106,7 @@ describe('Stripe webhook route', () => {
 
 function handler() {
 	return testMocks.post.mock.calls[0][2] as (
-		request: { headers: Record<string, string>; rawBody: string },
+		request: { headers: Record<string, string>; rawBody?: string },
 		response: ReturnType<typeof reply>,
 	) => Promise<ReturnType<typeof reply>>;
 }

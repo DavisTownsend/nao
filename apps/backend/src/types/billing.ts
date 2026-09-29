@@ -11,6 +11,10 @@ export const BILLING_STATUSES = [
 
 export type BillingStatus = (typeof BILLING_STATUSES)[number];
 
+export function isTerminalBillingStatus(status: string | null | undefined): boolean {
+	return status === 'canceled' || status === 'incomplete_expired';
+}
+
 export const STRIPE_WEBHOOK_JOB_NAME = 'stripe.webhook';
 
 export const CLOUD_MONTHLY_PLAN = {

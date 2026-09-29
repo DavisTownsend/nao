@@ -146,7 +146,7 @@ describe('cloud billing lifecycle', () => {
 		expect(mocks.releaseReminder).toHaveBeenCalledWith('org-id', TRIAL_ENDS_AT, NOW);
 	});
 
-	it('completes the reminder when at least one admin email is delivered', async () => {
+	it('releases the reminder when any admin email fails', async () => {
 		mocks.getOrganization.mockResolvedValue(billingOrganization());
 		mocks.listAdmins.mockResolvedValue([
 			{ email: 'first@example.com', name: 'First', role: 'admin', status: 'active' },
@@ -156,8 +156,8 @@ describe('cloud billing lifecycle', () => {
 
 		await sendCloudTrialReminder('org-id', NOW);
 
-		expect(mocks.releaseReminder).not.toHaveBeenCalled();
-		expect(mocks.completeReminder).toHaveBeenCalledWith('org-id', TRIAL_ENDS_AT, NOW);
+		expect(mocks.releaseReminder).toHaveBeenCalledWith('org-id', TRIAL_ENDS_AT, NOW);
+		expect(mocks.completeReminder).not.toHaveBeenCalled();
 	});
 
 	it('retries a reminder whose worker claim expired', async () => {

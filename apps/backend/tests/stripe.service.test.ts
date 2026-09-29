@@ -476,31 +476,35 @@ describe('cloud subscription projection', () => {
 
 describe('cloud billing recovery', () => {
 	it('lists a safe invoice history for the organization Customer', async () => {
-		stripeMocks.listInvoices.mockResolvedValue({
-			data: [
-				{
-					id: 'in_cloud',
-					number: 'NAO-0001',
-					billing_reason: 'subscription_create',
-					status: 'paid',
-					created: 1_795_000_000,
-					total: 200_000,
-					currency: 'eur',
-					hosted_invoice_url: 'https://invoice.stripe.com/in_cloud',
-					invoice_pdf: 'https://pay.stripe.com/invoice/in_cloud/pdf',
-				},
-				{
-					id: 'in_trial',
-					number: 'NAO-0002',
-					billing_reason: 'subscription_create',
-					status: 'paid',
-					created: 1_794_000_000,
-					total: 0,
-					currency: 'eur',
-					hosted_invoice_url: 'https://invoice.stripe.com/in_trial',
-					invoice_pdf: 'https://pay.stripe.com/invoice/in_trial/pdf',
-				},
-			],
+		const stripeInvoices = [
+			{
+				id: 'in_cloud',
+				number: 'NAO-0001',
+				billing_reason: 'subscription_create',
+				status: 'paid',
+				created: 1_795_000_000,
+				total: 200_000,
+				currency: 'eur',
+				hosted_invoice_url: 'https://invoice.stripe.com/in_cloud',
+				invoice_pdf: 'https://pay.stripe.com/invoice/in_cloud/pdf',
+			},
+			{
+				id: 'in_trial',
+				number: 'NAO-0002',
+				billing_reason: 'subscription_create',
+				status: 'paid',
+				created: 1_794_000_000,
+				total: 0,
+				currency: 'eur',
+				hosted_invoice_url: 'https://invoice.stripe.com/in_trial',
+				invoice_pdf: 'https://pay.stripe.com/invoice/in_trial/pdf',
+			},
+		];
+		stripeMocks.listInvoices.mockReturnValue({
+			data: stripeInvoices.slice(0, 1),
+			async *[Symbol.asyncIterator]() {
+				yield* stripeInvoices;
+			},
 		});
 
 		await expect(listCloudInvoices('cus_cloud')).resolves.toEqual([
