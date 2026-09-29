@@ -272,12 +272,10 @@ function OnboardingPage() {
 								variant='outline'
 								size='sm'
 								disabled={isRunning}
-								onClick={() =>
-									queueOrSendMessage({ text: 'Connect your database' }).catch(console.error)
-								}
+								onClick={() => queueOrSendMessage({ text: 'Connect database' }).catch(console.error)}
 								className='h-auto min-h-7 rounded-2xl py-1'
 							>
-								Connect your database
+								Connect database
 							</Button>
 						</div>
 						<p className='pl-6 text-xs text-muted-foreground'>

@@ -39,7 +39,7 @@ const PROVIDER_LABELS: Record<requestWarehouseCredentials.Provider, string> = {
 	trino: 'Trino',
 };
 
-type SqlProvider = 'postgres' | 'mysql' | 'clickhouse';
+type SqlProvider = 'postgres' | 'mysql' | 'clickhouse' | 'snowflake';
 
 interface SqlCredentials {
 	name: string;
@@ -51,6 +51,10 @@ interface SqlCredentials {
 	schemaName: string;
 	protocol: 'http' | 'native';
 	secure: boolean;
+	warehouse: string;
+	accountId: string;
+	showHost: boolean;
+	showPort: boolean;
 }
 
 interface SqlCredentialsFormProps {
@@ -68,6 +72,10 @@ const SQL_PROVIDER_SETTINGS = {
 		defaultPort: 5432,
 		schemaHint: '(optional, uses public by default)',
 		showSchema: true,
+		showWarehouse: false,
+		showAccountId: false,
+		showHost: true,
+		showPort: true,
 	},
 	mysql: {
 		label: 'MySQL',
@@ -75,6 +83,10 @@ const SQL_PROVIDER_SETTINGS = {
 		defaultPort: 3306,
 		schemaHint: '(optional)',
 		showSchema: true,
+		showWarehouse: false,
+		showAccountId: false,
+		showHost: true,
+		showPort: true,
 	},
 	clickhouse: {
 		label: 'ClickHouse',
@@ -82,6 +94,21 @@ const SQL_PROVIDER_SETTINGS = {
 		defaultPort: 8123,
 		schemaHint: '',
 		showSchema: false,
+		showWarehouse: false,
+		showAccountId: false,
+		showHost: true,
+		showPort: true,
+	},
+	snowflake: {
+		label: 'Snowflake',
+		defaultName: 'snowflake-prod',
+		defaultPort: 443,
+		schemaHint: '',
+		showSchema: true,
+		showWarehouse: true,
+		showAccountId: true,
+		showHost: false,
+		showPort: false,
 	},
 } satisfies Record<
 	SqlProvider,
@@ -91,6 +118,10 @@ const SQL_PROVIDER_SETTINGS = {
 		defaultPort: number;
 		schemaHint: string;
 		showSchema: boolean;
+		showWarehouse: boolean;
+		showAccountId: boolean;
+		showHost: boolean;
+		showPort: boolean;
 	}
 >;
 
@@ -111,7 +142,9 @@ export function RequestWarehouseCredentialsToolCall({
 	}
 
 	const sqlProvider: SqlProvider | null =
-		provider === 'postgres' || provider === 'mysql' || provider === 'clickhouse' ? provider : null;
+		provider === 'postgres' || provider === 'mysql' || provider === 'clickhouse' || provider === 'snowflake'
+			? provider
+			: null;
 
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>
@@ -151,6 +184,8 @@ export function RequestWarehouseCredentialsToolCall({
 							startProvisioning.reset();
 						}}
 					/>
+				) : provider === 'duckdb' ? (
+					<DuckDbConnectionCard onCancel={() => setOpen(false)} />
 				) : sqlProvider ? (
 					<SqlCredentialsForm
 						provider={sqlProvider}
@@ -159,10 +194,14 @@ export function RequestWarehouseCredentialsToolCall({
 								name: values.name,
 								provider: sqlProvider,
 								credentials: {
-									host: values.host,
-									port: values.port,
+									...(provider === 'postgres' || provider === 'mysql' || provider === 'clickhouse'
+										? {
+												host: values.host,
+												port: values.port,
+												user: values.user,
+											}
+										: {}),
 									database: values.database,
-									user: values.user,
 									password: values.password,
 									...(sqlProvider === 'clickhouse'
 										? {
@@ -172,6 +211,13 @@ export function RequestWarehouseCredentialsToolCall({
 										: {
 												schemaName: values.schemaName || undefined,
 											}),
+									...(sqlProvider === 'snowflake'
+										? {
+												warehouse: values.warehouse,
+												accountId: values.accountId,
+												username: values.user,
+											}
+										: {}),
 								},
 							});
 						}}
@@ -259,6 +305,10 @@ export function SqlCredentialsForm({ provider, onSubmit, onCancel, isPending, er
 			schemaName: '',
 			protocol: 'http' as SqlCredentials['protocol'],
 			secure: false,
+			warehouse: '',
+			accountId: '',
+			showHost: settings.showHost,
+			showPort: settings.showPort,
 		},
 		onSubmit: async ({ value }) => {
 			await onSubmit({
@@ -290,15 +340,19 @@ export function SqlCredentialsForm({ provider, onSubmit, onCancel, isPending, er
 					placeholder={settings.defaultName}
 					required={true}
 				/>
-				<TextField form={form} name='host' label='Host' placeholder='localhost' required={true} />
-				<TextField
-					form={form}
-					name='port'
-					label='Port'
-					type='number'
-					placeholder={String(settings.defaultPort)}
-					required={true}
-				/>
+				{settings.showHost && (
+					<TextField form={form} name='host' label='Host' placeholder='localhost' required={true} />
+				)}
+				{settings.showPort && (
+					<TextField
+						form={form}
+						name='port'
+						label='Port'
+						type='number'
+						placeholder={String(settings.defaultPort)}
+						required={true}
+					/>
+				)}
 				<TextField
 					form={form}
 					name='database'
@@ -344,7 +398,6 @@ export function SqlCredentialsForm({ provider, onSubmit, onCancel, isPending, er
 								</div>
 							)}
 						</form.Field>
-
 						<form.Field name='secure'>
 							{(field) => (
 								<label className='flex items-center gap-2 text-sm font-medium'>
@@ -356,6 +409,24 @@ export function SqlCredentialsForm({ provider, onSubmit, onCancel, isPending, er
 								</label>
 							)}
 						</form.Field>
+					</>
+				)}
+				{provider === 'snowflake' && (
+					<>
+						<TextField
+							form={form}
+							name='warehouse'
+							label='Warehouse'
+							placeholder='Enter your warehouse name'
+							required={true}
+						/>
+						<TextField
+							form={form}
+							name='accountId'
+							label='Account ID'
+							placeholder='Enter your account ID'
+							required={true}
+						/>
 					</>
 				)}
 				{error && <FormError error={error.message} />}
@@ -372,6 +443,33 @@ export function SqlCredentialsForm({ provider, onSubmit, onCancel, isPending, er
 					</form.Subscribe>
 				</div>
 			</form>
+		</div>
+	);
+}
+
+function DuckDbConnectionCard({ onCancel }: { onCancel: () => void }) {
+	const inputRef = useRef<HTMLInputElement>(null);
+	const [file, setFile] = useState<File | null>(null);
+	const form = useForm({
+		defaultValues: { name: 'duckdb-prod' },
+	});
+
+	return (
+		<div className='flex flex-col gap-3'>
+			<input
+				ref={inputRef}
+				type='file'
+				accept='.duckdb'
+				className='hidden'
+				onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+			/>
+			<TextField form={form} name='name' label='Connection Name' placeholder='duckdb-prod' required={true} />
+			<Button type='button' variant='outline' onClick={() => inputRef.current?.click()}>
+				{file?.name ?? 'Select DuckDB file'}
+			</Button>
+			<Button type='button' variant='ghost' onClick={onCancel}>
+				Cancel
+			</Button>
 		</div>
 	);
 }
