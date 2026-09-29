@@ -200,11 +200,12 @@ To roll back new sales, restore the previous lookup key and redeploy. Keep the s
 2. Verify `DB_URI`.
 3. Apply pending migrations with `npm run db:migrate -w @nao/backend`.
 4. Deploy with `CLOUD_BILLING_ENABLED=false`.
-5. Configure and validate the sandbox Product, Price, Portal, emails, retries, and webhook.
+5. Configure the sandbox Product, Price, Portal, emails, retries, and webhook destination.
 6. Enable billing in a non-production cloud environment.
-7. Exercise trial activation, renewal, failure, cancellation, replay, and recovery.
-8. Configure equivalent live Stripe objects and secrets.
-9. Enable production gradually and monitor reconciliation.
+7. Validate signed webhook delivery to `/api/billing/stripe/webhook`.
+8. Exercise trial activation, renewal, failure, cancellation, replay, and recovery.
+9. Configure equivalent live Stripe objects and secrets.
+10. Enable production gradually and monitor reconciliation.
 
 To disable billing enforcement, set `CLOUD_BILLING_ENABLED=false` and redeploy. This does not remove billing state, webhook inbox rows, organizations, or Stripe subscriptions.
 
