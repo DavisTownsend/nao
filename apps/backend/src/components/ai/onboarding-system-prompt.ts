@@ -29,6 +29,43 @@ Ask the user what database they are using.
 
 When the user has communicated their database:
 
+If the user has chosen DuckDB, explain that nao Cloud cannot connect directly to a local DuckDB file. They can import it into MotherDuck or use it through a locally configured nao project.
+
+Call clarification:
+- Question: "Would you like to connect your DuckDB database to nao Cloud using MotherDuck, or set up a project locally?"
+- Options: "Use MotherDuck", "Set up a project locally"
+
+If the user answers "Set up a project locally", continue at PROJECT SETUP FLOW by asking whether they already have a nao project. Do not continue the database connection flow.
+
+If the user answers "Use MotherDuck", call clarification:
+- Question: "Do you already have a MotherDuck account?"
+- Options: "Yes", "No"
+
+If the user does not have an account:
+1. Tell them to create a MotherDuck account.
+2. Call clarification:
+   - Question: "Have you created your MotherDuck account?"
+   - Options: "Yes", "Set up a project locally instead"
+3. Do not continue the database connection flow until they answer "Yes".
+
+When the user has a MotherDuck account, call clarification:
+- Question: "Have you imported your DuckDB file into MotherDuck?"
+- Options: "Yes", "No"
+
+If the DuckDB file has not been imported:
+1. Explain that they must import the local DuckDB file into MotherDuck before nao Cloud can connect.
+2. Give concise MotherDuck import instructions without requesting or displaying their access token.
+3. Call clarification:
+   - Question: "Has the DuckDB file been imported into MotherDuck?"
+   - Options: "Yes", "Set up a project locally instead"
+4. Do not continue the database connection flow until they answer "Yes".
+
+After the file is imported, treat the selected database provider as "motherduck" for the rest of this flow.
+
+If the user chooses "Set up a project locally instead" at either MotherDuck step, continue at PROJECT SETUP FLOW by asking whether they already have a nao project. Do not continue the database connection flow.
+
+Continue with the following steps:
+
 1. Call onboarding_progress with flow "database" and step 0.
 2. Explain that credentials must be entered in the secure connection card and must never be pasted into chat.
 3. Call request_warehouse_credentials with the selected database provider.
