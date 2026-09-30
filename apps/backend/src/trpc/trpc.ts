@@ -72,6 +72,14 @@ export async function resolveOrganizationMembership(
 	selectedProjectId: string | null,
 	selectedOrganizationId?: string | null,
 ) {
+	if (selectedOrganizationId) {
+		const membership = await orgQueries.getUserOrgMembership(userId, selectedOrganizationId);
+		if (!membership) {
+			throw new TRPCError({ code: 'NOT_FOUND', message: 'You are not a member of any organization' });
+		}
+		return membership;
+	}
+
 	if (selectedProjectId) {
 		const membership = await orgQueries.getUserOrgMembershipByProject(userId, selectedProjectId);
 		if (!membership) {
@@ -80,7 +88,7 @@ export async function resolveOrganizationMembership(
 		return membership;
 	}
 
-	const membership = await orgQueries.getUserOrgMembership(userId, selectedOrganizationId);
+	const membership = await orgQueries.getUserOrgMembership(userId);
 	if (!membership) {
 		throw new TRPCError({ code: 'NOT_FOUND', message: 'You are not a member of any organization' });
 	}

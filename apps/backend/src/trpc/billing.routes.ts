@@ -7,7 +7,6 @@ import {
 	createCloudPortalForAdmin,
 	createCloudResubscribeForAdmin,
 	createCloudTrialCheckoutForAdmin,
-	createLegacyCloudTrialCheckoutForAdmin,
 	getCloudBillingOrganizationForAdmin,
 	listCloudInvoicesForAdmin,
 	resumeCloudSubscriptionForAdmin,
@@ -51,6 +50,21 @@ const cloudBillingMemberProcedure = cloudBillingProcedure.use(async ({ ctx, next
 	});
 });
 
+const cloudBillingAccessProcedure = cloudBillingProcedure.use(async ({ ctx, next }) => {
+	const membership = await resolveOrganizationMembership(
+		ctx.user.id,
+		ctx.selectedProjectId,
+		ctx.selectedProjectId ? null : ctx.selectedOrganizationId,
+	);
+
+	return next({
+		ctx: {
+			organization: membership.organization,
+			orgRole: membership.role,
+		},
+	});
+});
+
 const cloudBillingAdminProcedure = cloudBillingMemberProcedure.use(async ({ ctx, next }) => {
 	if (ctx.orgRole !== 'admin') {
 		throw new TRPCError({ code: 'FORBIDDEN', message: 'Only organization admins can manage billing' });
@@ -61,7 +75,7 @@ const cloudBillingAdminProcedure = cloudBillingMemberProcedure.use(async ({ ctx,
 const requestInput = z.object({ requestId: z.uuid() });
 
 export const billingRoutes = {
-	getAccess: cloudBillingMemberProcedure.query(({ ctx }) => ({
+	getAccess: cloudBillingAccessProcedure.query(({ ctx }) => ({
 		hasAccess: hasCloudBillingAccess(true, ctx.organization),
 		status: ctx.organization.billingStatus,
 		trialEndsAt: ctx.organization.trialEndsAt,
@@ -100,10 +114,6 @@ export const billingRoutes = {
 				organization.trialStartedAt === null &&
 				organization.trialEndsAt === null &&
 				organization.stripeSubscriptionId === null,
-			legacyTrialWindowActive:
-				organization.billingStatus === 'trialing' &&
-				Boolean(organization.trialEndsAt && organization.trialEndsAt.getTime() > Date.now()) &&
-				!organization.stripeSubscriptionId,
 			portalAvailable: Boolean(organization.stripeCustomerId && organization.stripeSubscriptionId),
 			invoiceHistoryAvailable: Boolean(organization.stripeCustomerId),
 			paymentMethodManagementAvailable: Boolean(organization.stripeCustomerId),
@@ -148,21 +158,6 @@ export const billingRoutes = {
 			});
 		} catch (error) {
 			throwBillingFailure('billing sync', 'Unable to sync Stripe billing status', error);
-		}
-	}),
-
-	createLegacyTrialCheckoutSession: cloudBillingAdminProcedure.mutation(async ({ ctx }) => {
-		try {
-			const url = await createLegacyCloudTrialCheckoutForAdmin({
-				userId: ctx.user.id,
-				organizationId: ctx.organization.id,
-			});
-			return { url };
-		} catch (error) {
-			if (error instanceof CloudInitialCheckoutUnavailableError) {
-				throw new TRPCError({ code: 'CONFLICT', message: error.message });
-			}
-			throwBillingFailure('Checkout', 'Unable to start Stripe Checkout', error);
 		}
 	}),
 

@@ -5391,18 +5391,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "trial_reminder_claimed_at": {
-          "name": "trial_reminder_claimed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "trial_reminder_sent_for_trial_ends_at": {
-          "name": "trial_reminder_sent_for_trial_ends_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",

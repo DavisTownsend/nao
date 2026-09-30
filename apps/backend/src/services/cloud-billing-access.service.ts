@@ -50,8 +50,6 @@ export function hasCloudBillingAccess(
 						now,
 						ACTIVE_RECONCILIATION_GRACE_MS,
 					);
-		case 'past_due':
-			return true;
 		default:
 			return false;
 	}

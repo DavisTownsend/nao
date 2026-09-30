@@ -1,7 +1,6 @@
 import type Stripe from 'stripe';
 
 import * as billingQueries from '../queries/billing.queries';
-import { sendCloudTrialReminder } from '../services/billing-lifecycle.service';
 import { reconcileCloudBillingCustomer } from '../services/billing-reconciliation.service';
 import type { JobHandler } from '../services/scheduler.service';
 import { getCloudCheckoutSubscription, getCloudSubscription, getStripeEvent } from '../services/stripe.service';
@@ -15,7 +14,6 @@ const SUBSCRIPTION_EVENTS = new Set([
 	'customer.subscription.deleted',
 	'customer.subscription.paused',
 	'customer.subscription.resumed',
-	'customer.subscription.trial_will_end',
 ]);
 
 const INVOICE_EVENTS = new Set([
@@ -79,16 +77,10 @@ async function processStripeEvent(event: Stripe.Event): Promise<void> {
 	if (SUBSCRIPTION_EVENTS.has(event.type)) {
 		const eventSubscription = event.data.object as Stripe.Subscription;
 		const customerId = stripeId(eventSubscription.customer);
-		const result = await reconcileCloudBillingCustomer({
+		await reconcileCloudBillingCustomer({
 			stripeCustomerId: customerId,
 			organizationIdHint: eventSubscription.metadata.nao_org_id,
 		});
-		if (event.type === 'customer.subscription.trial_will_end' && !result.ignored) {
-			const organization = await billingQueries.getOrganizationByStripeCustomerId(customerId);
-			if (organization) {
-				await sendCloudTrialReminder(organization.id);
-			}
-		}
 		return;
 	}
 

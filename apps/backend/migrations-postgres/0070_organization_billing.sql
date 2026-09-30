@@ -21,7 +21,5 @@ ALTER TABLE "organization" ADD COLUMN "has_default_payment_method" boolean;--> s
 ALTER TABLE "organization" ADD COLUMN "billing_access_ends_at" timestamp;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "billing_updated_at" timestamp;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "billing_sync_token" text;--> statement-breakpoint
-ALTER TABLE "organization" ADD COLUMN "trial_reminder_claimed_at" timestamp;--> statement-breakpoint
-ALTER TABLE "organization" ADD COLUMN "trial_reminder_sent_for_trial_ends_at" timestamp;--> statement-breakpoint
 ALTER TABLE "organization" ADD CONSTRAINT "organization_stripe_customer_id_unique" UNIQUE("stripe_customer_id");--> statement-breakpoint
 ALTER TABLE "organization" ADD CONSTRAINT "organization_stripe_subscription_id_unique" UNIQUE("stripe_subscription_id");

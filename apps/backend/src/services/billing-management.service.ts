@@ -6,7 +6,6 @@ import { CLOUD_MONTHLY_PLAN, isTerminalBillingStatus } from '../types/billing';
 import { HandlerError } from '../utils/error';
 import { reconcileCloudBillingCustomer } from './billing-reconciliation.service';
 import {
-	CloudInitialCheckoutUnavailableError,
 	createCloudCheckoutSession,
 	createCloudCustomer,
 	createCloudPaymentMethodSession,
@@ -50,7 +49,6 @@ export async function createCloudTrialCheckoutForAdmin(input: AdminBillingInput)
 	return createCloudCheckoutSession({
 		organizationId: organization.id,
 		stripeCustomerId,
-		trialEndsAt: null,
 		trialDays: CLOUD_MONTHLY_PLAN.trialDays,
 	});
 }
@@ -70,23 +68,6 @@ export async function syncCloudBillingForAdmin(input: AdminBillingInput): Promis
 		organizationIdHint: organization.id,
 	});
 	return { synced: true };
-}
-
-export async function createLegacyCloudTrialCheckoutForAdmin(input: AdminBillingInput): Promise<string> {
-	const organization = await requireAdminOrganization(input);
-	if (organization.stripeSubscriptionId) {
-		throw new CloudInitialCheckoutUnavailableError('This organization already has a Stripe subscription');
-	}
-	if (!organization.trialStartedAt) {
-		throw new CloudBillingManagementInputError('Start the organization trial before subscribing');
-	}
-
-	const stripeCustomerId = await ensureCloudCustomer(organization, input.userId);
-	return createCloudCheckoutSession({
-		organizationId: organization.id,
-		stripeCustomerId,
-		trialEndsAt: organization.trialEndsAt,
-	});
 }
 
 export async function createCloudPortalForAdmin(input: AdminBillingRequestInput): Promise<string> {

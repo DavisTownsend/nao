@@ -24,14 +24,10 @@ import s from '../src/db/abstractSchema';
 import { db } from '../src/db/db';
 import {
 	claimBillingSync,
-	claimTrialReminder,
-	completeTrialReminder,
-	listOrganizationsDueTrialReminder,
-	releaseTrialReminder,
 	type SubscriptionProjection,
 	updateSubscriptionProjection,
 } from '../src/queries/billing.queries';
-import { enqueueOnceJob } from '../src/queries/scheduled-job.queries';
+import { claimDueJobs, enqueueOnceJob } from '../src/queries/scheduled-job.queries';
 
 describe('billing consistency queries', () => {
 	beforeAll(async () => {
@@ -109,64 +105,28 @@ describe('billing consistency queries', () => {
 		expect(pending).toMatchObject({ status: 'pending', attempts: 1, payload: { eventId: 'evt_pending' } });
 	});
 
-	it('claims a trial reminder only once', async () => {
-		const trialEndsAt = new Date('2026-10-08T00:00:00.000Z');
-		const claimedAt = new Date('2026-10-05T00:00:00.000Z');
-		const claimableBefore = new Date('2026-10-04T23:00:00.000Z');
-		await db.insert(s.organization).values({
-			id: 'trial-reminder-org',
-			name: 'Trial Reminder',
-			slug: 'trial-reminder',
-			billingStatus: 'trialing',
-			stripeSubscriptionId: 'sub_trial',
-			trialEndsAt,
-		});
+	it('leaves jobs pending until their handlers are registered', async () => {
+		await db.insert(s.scheduledJob).values([
+			{
+				id: 'registered-job',
+				name: 'registered.job',
+				runAt: new Date(0),
+				status: 'pending',
+			},
+			{
+				id: 'unregistered-job',
+				name: 'unregistered.job',
+				runAt: new Date(0),
+				status: 'pending',
+			},
+		]);
 
-		await expect(claimTrialReminder('trial-reminder-org', trialEndsAt, claimedAt, claimableBefore)).resolves.toBe(
-			true,
-		);
-		await expect(claimTrialReminder('trial-reminder-org', trialEndsAt, claimedAt, claimableBefore)).resolves.toBe(
-			false,
-		);
-		await releaseTrialReminder('trial-reminder-org', trialEndsAt, claimedAt);
-		await expect(claimTrialReminder('trial-reminder-org', trialEndsAt, claimedAt, claimableBefore)).resolves.toBe(
-			true,
-		);
-		await completeTrialReminder('trial-reminder-org', trialEndsAt, claimedAt);
-		const [completed] = await db.select().from(s.organization).where(eq(s.organization.id, 'trial-reminder-org'));
-		expect(completed).toMatchObject({
-			trialReminderClaimedAt: null,
-			trialReminderSentForTrialEndsAt: trialEndsAt,
-		});
-		await expect(
-			claimTrialReminder(
-				'trial-reminder-org',
-				trialEndsAt,
-				new Date('2026-10-05T02:00:00.000Z'),
-				new Date('2026-10-05T01:00:00.000Z'),
-			),
-		).resolves.toBe(false);
+		await expect(claimDueJobs(new Date(), 10, 'worker-id', ['registered.job'])).resolves.toMatchObject([
+			{ id: 'registered-job', status: 'running' },
+		]);
 
-		const extendedTrialEndsAt = new Date('2026-10-09T00:00:00.000Z');
-		await db
-			.update(s.organization)
-			.set({ trialEndsAt: extendedTrialEndsAt, trialReminderClaimedAt: new Date('2026-10-06T00:00:00.000Z') })
-			.where(eq(s.organization.id, 'trial-reminder-org'));
-		await expect(
-			listOrganizationsDueTrialReminder(
-				new Date('2026-10-06T02:00:00.000Z'),
-				new Date('2026-10-09T02:00:00.000Z'),
-				new Date('2026-10-06T01:00:00.000Z'),
-			),
-		).resolves.toEqual([expect.objectContaining({ id: 'trial-reminder-org' })]);
-		await expect(
-			claimTrialReminder(
-				'trial-reminder-org',
-				extendedTrialEndsAt,
-				new Date('2026-10-06T02:00:00.000Z'),
-				new Date('2026-10-06T01:00:00.000Z'),
-			),
-		).resolves.toBe(true);
+		const [unregistered] = await db.select().from(s.scheduledJob).where(eq(s.scheduledJob.id, 'unregistered-job'));
+		expect(unregistered).toMatchObject({ status: 'pending', attempts: 0 });
 	});
 });
 

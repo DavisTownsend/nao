@@ -45,11 +45,14 @@ describe('cloud billing environment', () => {
 		});
 
 		expect(result.status).toBe(1);
-		expect(result.stderr).toContain('STRIPE_SECRET_KEY is required when cloud billing is enabled');
-		expect(result.stderr).toContain('STRIPE_WEBHOOK_SECRET is required when cloud billing is enabled');
-		expect(result.stderr).toContain(
-			'STRIPE_CLOUD_MONTHLY_PRICE_LOOKUP_KEY is required when cloud billing is enabled',
-		);
+		for (const variable of [
+			'STRIPE_SECRET_KEY',
+			'STRIPE_WEBHOOK_SECRET',
+			'STRIPE_CLOUD_PRODUCT_ID',
+			'STRIPE_CLOUD_MONTHLY_PRICE_LOOKUP_KEY',
+		]) {
+			expect(result.stderr).toContain(`${variable} is required when cloud billing is enabled`);
+		}
 	});
 
 	it('remains inactive in self-hosted mode', () => {
@@ -65,6 +68,7 @@ describe('cloud billing environment', () => {
 		const result = loadEnvWithOverrides({
 			CLOUD_BILLING_ENABLED: 'true',
 			NAO_MODE: 'cloud',
+			STRIPE_CLOUD_PRODUCT_ID: 'prod_cloud',
 			STRIPE_CLOUD_MONTHLY_PRICE_LOOKUP_KEY: 'nao_cloud_monthly_v2',
 			STRIPE_SECRET_KEY: 'sk_test_sandbox',
 			STRIPE_WEBHOOK_SECRET: 'whsec_sandbox',

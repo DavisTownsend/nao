@@ -20,13 +20,14 @@ export const STRIPE_WEBHOOK_JOB_NAME = 'stripe.webhook';
 export const CLOUD_MONTHLY_PLAN = {
 	key: 'cloud_monthly_v2',
 	name: 'nao Cloud',
-	currency: 'eur',
+	currency: 'usd',
 	interval: 'month',
 	intervalCount: 1,
 	trialDays: 14,
 	userLimit: null,
 } as const;
 
-export type CloudBillingPlan = typeof CLOUD_MONTHLY_PLAN & {
+export type CloudBillingPlan = Omit<typeof CLOUD_MONTHLY_PLAN, 'currency'> & {
 	amount: number;
+	currency: string;
 };

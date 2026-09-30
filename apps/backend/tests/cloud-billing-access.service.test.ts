@@ -90,7 +90,7 @@ describe('cloud billing access entitlement', () => {
 			entitlement('active', { cancellationScheduled: true, billingAccessEndsAt: past }),
 			false,
 		],
-		['past due while Stripe retries', true, entitlement('past_due'), true],
+		['past due', true, entitlement('past_due', { currentPeriodEndsAt: future }), false],
 		['unpaid', true, entitlement('unpaid'), false],
 		['paused', true, entitlement('paused'), false],
 		['incomplete', true, entitlement('incomplete'), false],

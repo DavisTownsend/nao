@@ -6,10 +6,13 @@ const testMocks = vi.hoisted(() => ({
 	insertEvent: vi.fn(),
 	post: vi.fn(),
 }));
+const testState = vi.hoisted(() => ({ secretKey: 'sk_test_sandbox' }));
 
 vi.mock('../src/env', () => ({
 	env: {
-		MODE: 'dev',
+		get STRIPE_SECRET_KEY() {
+			return testState.secretKey;
+		},
 		STRIPE_WEBHOOK_SECRET: 'whsec_test',
 	},
 }));
@@ -35,6 +38,7 @@ import { stripeWebhookRoutes } from '../src/routes/stripe-webhook';
 describe('Stripe webhook route', () => {
 	beforeEach(async () => {
 		vi.clearAllMocks();
+		testState.secretKey = 'sk_test_sandbox';
 		await stripeWebhookRoutes({ post: testMocks.post } as never);
 	});
 
@@ -62,12 +66,17 @@ describe('Stripe webhook route', () => {
 		expect(testMocks.enqueueOnce).not.toHaveBeenCalled();
 	});
 
-	it('rejects live events outside production without persisting work', async () => {
+	it.each([
+		['live event with a test key', 'sk_test_sandbox', true],
+		['test event with a live key', 'sk_live_production', false],
+		['test event with a live restricted key', 'rk_live_production', false],
+	])('rejects a %s without persisting work', async (_name, secretKey, livemode) => {
+		testState.secretKey = secretKey;
 		testMocks.constructEventAsync.mockResolvedValue({
-			id: 'evt_live',
+			id: 'evt_mismatch',
 			type: 'checkout.session.completed',
-			livemode: true,
-			data: { object: { id: 'cs_live' } },
+			livemode,
+			data: { object: { id: 'cs_mismatch' } },
 		});
 
 		const response = await handler()({ headers: { 'stripe-signature': 'valid' }, rawBody: '{}' }, reply());

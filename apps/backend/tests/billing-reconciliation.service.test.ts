@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
 	getOrganizationById: vi.fn(),
 	hasDefaultPaymentMethod: vi.fn(),
 	listSubscriptions: vi.fn(),
+	logError: vi.fn(),
 	subscriptionProjection: vi.fn(),
 	updatePaymentMethod: vi.fn(),
 	updateSubscription: vi.fn(),
@@ -28,6 +29,10 @@ vi.mock('../src/services/stripe.service', () => ({
 	cloudSubscriptionProjection: mocks.subscriptionProjection,
 	hasCloudDefaultPaymentMethod: mocks.hasDefaultPaymentMethod,
 	listCloudSubscriptions: mocks.listSubscriptions,
+}));
+
+vi.mock('../src/utils/logger', () => ({
+	logger: { error: mocks.logError },
 }));
 
 import { reconcileCloudBillingCustomer } from '../src/services/billing-reconciliation.service';
@@ -109,16 +114,29 @@ describe('cloud billing reconciliation', () => {
 		expect(mocks.subscriptionProjection).toHaveBeenCalledWith(expect.objectContaining({ id: 'sub_newer' }));
 	});
 
-	it('fails closed when Stripe has multiple current subscriptions', async () => {
+	it('keeps reconciliation moving and logs when Stripe has multiple current subscriptions', async () => {
 		mocks.listSubscriptions.mockResolvedValue([
-			buildSubscription({ id: 'sub_one', status: 'active' }),
-			buildSubscription({ id: 'sub_two', status: 'trialing' }),
+			buildSubscription({ id: 'sub_new', status: 'active', created: 10 }),
+			buildSubscription({ id: 'sub_old', status: 'active', created: 20 }),
+			buildSubscription({ id: 'sub_trial', status: 'trialing', created: 30 }),
 		]);
 
-		await expect(reconcileCloudBillingCustomer({ stripeCustomerId: 'cus_cloud' })).rejects.toThrow(
-			'multiple current cloud subscriptions',
+		await expect(reconcileCloudBillingCustomer({ stripeCustomerId: 'cus_cloud' })).resolves.toEqual({
+			applied: true,
+			ignored: false,
+		});
+
+		expect(mocks.subscriptionProjection).toHaveBeenCalledWith(expect.objectContaining({ id: 'sub_old' }));
+		expect(mocks.logError).toHaveBeenCalledWith(
+			'Stripe Customer "cus_cloud" has multiple current cloud subscriptions',
+			{
+				source: 'system',
+				context: {
+					currentSubscriptionIds: ['sub_new', 'sub_old', 'sub_trial'],
+					selectedSubscriptionId: 'sub_old',
+				},
+			},
 		);
-		expect(mocks.updateSubscription).not.toHaveBeenCalled();
 	});
 
 	it('uses live subscription metadata when attaching an unmapped Customer', async () => {

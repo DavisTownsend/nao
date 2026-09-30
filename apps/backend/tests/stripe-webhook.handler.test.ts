@@ -4,16 +4,13 @@ const mocks = vi.hoisted(() => ({
 	getCheckoutSubscription: vi.fn(),
 	getEvent: vi.fn(),
 	getInboxEvent: vi.fn(),
-	getOrganizationByCustomer: vi.fn(),
 	getSubscription: vi.fn(),
 	markFailed: vi.fn(),
 	markProcessed: vi.fn(),
 	reconcileCustomer: vi.fn(),
-	sendTrialReminder: vi.fn(),
 }));
 
 vi.mock('../src/queries/billing.queries', () => ({
-	getOrganizationByStripeCustomerId: mocks.getOrganizationByCustomer,
 	getStripeWebhookEvent: mocks.getInboxEvent,
 	markStripeWebhookEventFailed: mocks.markFailed,
 	markStripeWebhookEventProcessed: mocks.markProcessed,
@@ -21,10 +18,6 @@ vi.mock('../src/queries/billing.queries', () => ({
 
 vi.mock('../src/services/billing-reconciliation.service', () => ({
 	reconcileCloudBillingCustomer: mocks.reconcileCustomer,
-}));
-
-vi.mock('../src/services/billing-lifecycle.service', () => ({
-	sendCloudTrialReminder: mocks.sendTrialReminder,
 }));
 
 vi.mock('../src/services/stripe.service', () => ({
@@ -118,23 +111,6 @@ describe('stripeWebhookHandler', () => {
 			organizationIdHint: 'org-id',
 		});
 		expect(mocks.markProcessed).toHaveBeenCalledWith('evt_123');
-	});
-
-	it('notifies the mapped organization when a trial will end', async () => {
-		mocks.getEvent.mockResolvedValue({
-			type: 'customer.subscription.trial_will_end',
-			data: {
-				object: {
-					customer: 'cus_cloud',
-					metadata: { nao_org_id: 'org-id' },
-				},
-			},
-		});
-		mocks.getOrganizationByCustomer.mockResolvedValue({ id: 'org-id' });
-
-		await stripeWebhookHandler({ eventId: 'evt_123' }, {} as never);
-
-		expect(mocks.sendTrialReminder).toHaveBeenCalledWith('org-id');
 	});
 
 	it('projects the latest Customer payment-method state', async () => {

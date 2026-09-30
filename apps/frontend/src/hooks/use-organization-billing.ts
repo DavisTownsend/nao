@@ -44,13 +44,6 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 			},
 		}),
 	);
-	const legacyTrialCheckout = useMutation(
-		trpc.billing.createLegacyTrialCheckoutSession.mutationOptions({
-			onSuccess: ({ url }) => {
-				window.location.href = url;
-			},
-		}),
-	);
 	const portal = useMutation(
 		trpc.billing.createPortalSession.mutationOptions({
 			onSuccess: ({ url }) => {
@@ -97,10 +90,6 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 	const hasStripeSubscription = billing.data?.hasStripeSubscription === true;
 	const status = billing.data?.status ?? null;
 	const isHistoricalSubscription = isHistoricalBillingStatus(status);
-	const isLegacyTrialExpired =
-		status === 'trialing' && !hasStripeSubscription && billing.data?.legacyTrialWindowActive === false;
-	const isLegacyTrialAwaitingCheckout =
-		status === 'trialing' && !hasStripeSubscription && billing.data?.legacyTrialWindowActive === true;
 	const isCheckoutConfirmed =
 		search.checkout === 'subscribed'
 			? hasStripeSubscription && !isHistoricalSubscription
@@ -111,8 +100,6 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 		status,
 		billing.data?.cancellationScheduled ?? false,
 		billing.data?.hasDefaultPaymentMethod === true,
-		isLegacyTrialExpired,
-		isLegacyTrialAwaitingCheckout,
 	);
 	const isEndingAtPeriodEnd =
 		billing.data?.cancellationScheduled === true && (status === 'active' || status === 'trialing');
@@ -191,8 +178,6 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 		statusView,
 		hasStripeSubscription,
 		isHistoricalSubscription,
-		isLegacyTrialExpired,
-		isLegacyTrialAwaitingCheckout,
 		isEndingAtPeriodEnd,
 		isCheckoutPolling,
 		isCheckoutConfirmationDelayed:
@@ -201,7 +186,6 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 			!isCheckoutPolling,
 		checkoutFeedback,
 		portalFeedback,
-		legacyTrialCheckoutError: legacyTrialCheckout.isError ? legacyTrialCheckout.error.message : null,
 		trialCheckoutError: trialCheckout.isError ? trialCheckout.error.message : null,
 		managementError:
 			resumeSubscription.error?.message ??
@@ -210,14 +194,12 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 			portal.error?.message ??
 			syncStripeBilling.error?.message ??
 			null,
-		isLegacyTrialCheckoutPending: legacyTrialCheckout.isPending,
 		isTrialCheckoutPending: trialCheckout.isPending,
 		isPortalPending: portal.isPending,
 		isPaymentMethodPortalPending: paymentMethodPortal.isPending,
 		isResubscribePending: resubscribe.isPending,
 		isResumePending: resumeSubscription.isPending,
 		isBillingSyncPending: syncStripeBilling.isPending,
-		openLegacyTrialCheckout: () => legacyTrialCheckout.mutate(),
 		openTrialCheckout: () => trialCheckout.mutate(),
 		openPortal: () => portal.mutate({ requestId: crypto.randomUUID() }),
 		openPaymentMethodPortal: () => paymentMethodPortal.mutate({ requestId: crypto.randomUUID() }),

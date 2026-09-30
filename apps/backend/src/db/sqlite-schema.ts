@@ -206,8 +206,6 @@ export const organization = sqliteTable('organization', {
 	billingAccessEndsAt: integer('billing_access_ends_at', { mode: 'timestamp_ms' }),
 	billingUpdatedAt: integer('billing_updated_at', { mode: 'timestamp_ms' }),
 	billingSyncToken: text('billing_sync_token'),
-	trialReminderClaimedAt: integer('trial_reminder_claimed_at', { mode: 'timestamp_ms' }),
-	trialReminderSentForTrialEndsAt: integer('trial_reminder_sent_for_trial_ends_at', { mode: 'timestamp_ms' }),
 
 	createdAt: integer('created_at', { mode: 'timestamp_ms' })
 		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)

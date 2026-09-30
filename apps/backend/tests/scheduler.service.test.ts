@@ -17,7 +17,7 @@ vi.mock('../src/utils/logger', () => ({
 	serializeError: (error: unknown) => ({ error: String(error) }),
 }));
 
-import { startScheduler, stopScheduler } from '../src/services/scheduler.service';
+import { registerJob, startScheduler, stopScheduler } from '../src/services/scheduler.service';
 
 describe('scheduler', () => {
 	beforeEach(() => {
@@ -58,5 +58,17 @@ describe('scheduler', () => {
 			nextRunAt,
 		);
 		expect(mocks.rescheduleJob).not.toHaveBeenCalled();
+	});
+
+	it('only claims jobs with handlers registered in this process', async () => {
+		registerJob('registered.job', vi.fn());
+		mocks.claimDueJobs.mockResolvedValueOnce([]);
+
+		startScheduler();
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(mocks.claimDueJobs).toHaveBeenCalledWith(new Date('2026-09-28T10:00:00.000Z'), 10, expect.any(String), [
+			'registered.job',
+		]);
 	});
 });

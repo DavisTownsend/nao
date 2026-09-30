@@ -1,38 +1,16 @@
-const STRIPE_CHECKOUT_MIN_TRIAL_MS = 48 * 60 * 60 * 1000;
-
 type BillingStatusView = {
 	label: string;
 	description: string;
 	variant: 'success' | 'secondary' | 'destructive' | 'outline';
 };
 
-export function preservesRemainingTrial(trialEndsAt: Date | null, now = Date.now()): boolean {
-	return trialEndsAt !== null && trialEndsAt.getTime() >= now + STRIPE_CHECKOUT_MIN_TRIAL_MS;
-}
-
 export function getBillingStatusView(
 	status: string | null,
 	cancellationScheduled: boolean,
 	hasDefaultPaymentMethod: boolean,
-	isLegacyTrialExpired: boolean,
-	isLegacyTrialAwaitingCheckout: boolean,
 ): BillingStatusView {
 	switch (status) {
 		case 'trialing':
-			if (isLegacyTrialAwaitingCheckout) {
-				return {
-					label: 'Trial setup incomplete',
-					description: 'Complete Stripe Checkout before the free trial and access begin.',
-					variant: 'outline',
-				};
-			}
-			if (isLegacyTrialExpired) {
-				return {
-					label: 'Trial ended',
-					description: 'Your free trial has ended. Subscribe to restore access.',
-					variant: 'outline',
-				};
-			}
 			return {
 				label: 'Free trial',
 				description: cancellationScheduled
@@ -53,7 +31,7 @@ export function getBillingStatusView(
 		case 'past_due':
 			return {
 				label: 'Payment past due',
-				description: 'A payment failed. Update your payment details to avoid losing access.',
+				description: 'A payment failed. Access is paused until the outstanding payment is resolved.',
 				variant: 'destructive',
 			};
 		case 'unpaid':

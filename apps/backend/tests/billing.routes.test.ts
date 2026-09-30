@@ -111,6 +111,16 @@ describe('billing.getAccess', () => {
 			canManageBilling: true,
 		});
 	});
+
+	it('uses the active project organization before the stored organization selection', async () => {
+		testState.membership = membership({ billingStatus: 'active' });
+
+		await expect(caller('project-id', 'organization-id').billing.getAccess()).resolves.toMatchObject({
+			status: 'active',
+		});
+		expect(orgQueries.getUserOrgMembershipByProject).toHaveBeenCalledWith('user-id', 'project-id');
+		expect(orgQueries.getUserOrgMembership).not.toHaveBeenCalled();
+	});
 });
 
 describe('billing.getStatus', () => {
@@ -137,7 +147,7 @@ describe('billing.getStatus', () => {
 				key: 'cloud_monthly_v2',
 				name: 'nao Cloud',
 				amount: 250_000,
-				currency: 'eur',
+				currency: 'usd',
 			},
 			planKey: 'cloud_monthly_v2',
 			status: 'trialing',
@@ -145,7 +155,6 @@ describe('billing.getStatus', () => {
 			hasDefaultPaymentMethod: true,
 			canManageBilling: true,
 			hasStripeSubscription: false,
-			legacyTrialWindowActive: true,
 			trialAvailable: false,
 		});
 	});
@@ -186,6 +195,16 @@ describe('billing.getStatus', () => {
 		await expect(caller('project-id').billing.getStatus()).resolves.toMatchObject({ status: 'active' });
 		expect(orgQueries.getUserOrgMembershipByProject).toHaveBeenCalledWith('user-id', 'project-id');
 		expect(orgQueries.getUserOrgMembership).not.toHaveBeenCalled();
+	});
+
+	it('prefers the explicitly selected organization over the active project', async () => {
+		testState.membership = membership({ billingStatus: 'active' });
+
+		await expect(caller('project-id', 'organization-id').billing.getStatus()).resolves.toMatchObject({
+			status: 'active',
+		});
+		expect(orgQueries.getUserOrgMembership).toHaveBeenCalledWith('user-id', 'organization-id');
+		expect(orgQueries.getUserOrgMembershipByProject).not.toHaveBeenCalled();
 	});
 
 	it('hides Stripe configuration errors from the client', async () => {
@@ -241,7 +260,6 @@ describe('billing.createTrialCheckoutSession', () => {
 			organizationId: 'org-id',
 			stripeCustomerId: 'cus_cloud',
 			trialDays: 14,
-			trialEndsAt: null,
 		});
 	});
 
@@ -263,65 +281,6 @@ describe('billing.createTrialCheckoutSession', () => {
 		await expect(caller().billing.createTrialCheckoutSession()).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 		expect(stripeMocks.createCustomer).not.toHaveBeenCalled();
 		expect(stripeMocks.createCheckout).not.toHaveBeenCalled();
-	});
-});
-
-describe('billing.createLegacyTrialCheckoutSession', () => {
-	beforeEach(() => {
-		testState.billingEnabled = true;
-		testState.membership = membership({
-			billingPlan: 'cloud_monthly_v2',
-			billingStatus: 'trialing',
-			trialStartedAt: new Date('2026-09-24T00:00:00.000Z'),
-			trialEndsAt: new Date('2026-10-08T00:00:00.000Z'),
-		});
-		vi.clearAllMocks();
-		stripeMocks.createCustomer.mockResolvedValue({ id: 'cus_cloud' });
-		stripeMocks.attachCustomer.mockResolvedValue({
-			...(testState.membership as { organization: Record<string, unknown> }).organization,
-			stripeCustomerId: 'cus_cloud',
-		});
-		stripeMocks.createCheckout.mockResolvedValue('https://checkout.stripe.com/session');
-	});
-
-	it('creates a server-owned cardless Checkout URL for an organization admin', async () => {
-		await expect(caller().billing.createLegacyTrialCheckoutSession()).resolves.toEqual({
-			url: 'https://checkout.stripe.com/session',
-		});
-
-		expect(stripeService.createCloudCustomer).toHaveBeenCalledWith({
-			organizationId: 'org-id',
-			organizationName: 'Test Organization',
-			adminEmail: 'admin@example.com',
-		});
-		expect(stripeService.createCloudCheckoutSession).toHaveBeenCalledWith({
-			organizationId: 'org-id',
-			stripeCustomerId: 'cus_cloud',
-			trialEndsAt: new Date('2026-10-08T00:00:00.000Z'),
-		});
-	});
-
-	it('rejects non-admin members before Stripe work', async () => {
-		testState.membership = membership({}, 'member');
-
-		await expect(caller().billing.createLegacyTrialCheckoutSession()).rejects.toMatchObject({ code: 'FORBIDDEN' });
-		expect(stripeService.createCloudCustomer).not.toHaveBeenCalled();
-	});
-
-	it('requires the organization to start its trial before Checkout', async () => {
-		testState.membership = membership({});
-
-		await expect(caller().billing.createLegacyTrialCheckoutSession()).rejects.toMatchObject({
-			code: 'BAD_REQUEST',
-		});
-		expect(stripeService.createCloudCustomer).not.toHaveBeenCalled();
-	});
-
-	it('rejects Checkout when a Stripe subscription already exists', async () => {
-		testState.membership = membership({ stripeSubscriptionId: 'sub_cloud' });
-
-		await expect(caller().billing.createLegacyTrialCheckoutSession()).rejects.toMatchObject({ code: 'CONFLICT' });
-		expect(stripeService.createCloudCustomer).not.toHaveBeenCalled();
 	});
 });
 
@@ -398,13 +357,14 @@ describe('billing management mutations', () => {
 	});
 });
 
-function caller(selectedProjectId: string | null = null) {
+function caller(selectedProjectId: string | null = null, selectedOrganizationId: string | null = null) {
 	return testRouter.createCaller({
 		session: {
 			user: { id: 'user-id', name: 'Admin', email: 'admin@example.com' },
 			session: { token: 'session-token' },
 		},
 		selectedProjectId,
+		selectedOrganizationId,
 	} as never);
 }
 
@@ -443,7 +403,7 @@ function cloudPlan(amount: number) {
 		key: 'cloud_monthly_v2',
 		name: 'nao Cloud',
 		amount,
-		currency: 'eur',
+		currency: 'usd',
 		interval: 'month',
 		intervalCount: 1,
 		trialDays: 14,

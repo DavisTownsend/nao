@@ -96,7 +96,9 @@ async function runPoll(): Promise<void> {
 	}
 	pollInFlight = true;
 	try {
-		const jobs = await scheduledJobQueries.claimDueJobs(new Date(), CLAIM_BATCH_SIZE, instanceId);
+		const jobs = await scheduledJobQueries.claimDueJobs(new Date(), CLAIM_BATCH_SIZE, instanceId, [
+			...handlers.keys(),
+		]);
 		await Promise.all(jobs.map((job) => executeJob(job)));
 	} catch (err) {
 		logger.error('Scheduler poll failed', { source: 'system', context: serializeError(err) });

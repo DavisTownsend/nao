@@ -1,6 +1,7 @@
 import Stripe from 'stripe';
 
 import { env, isCloudBillingEnabled } from '../env';
+import type { SubscriptionProjection } from '../queries/billing.queries';
 import {
 	type BillingStatus,
 	CLOUD_MONTHLY_PLAN,
@@ -9,7 +10,6 @@ import {
 } from '../types/billing';
 
 const STRIPE_API_VERSION: Stripe.LatestApiVersion = '2026-08-26.dahlia';
-const STRIPE_CHECKOUT_MIN_TRIAL_MS = 48 * 60 * 60 * 1000;
 const CLOUD_MONTHLY_PRICE_CACHE_TTL_MS = 5 * 60 * 1000;
 const ORGANIZATION_METADATA_KEY = 'nao_org_id';
 const PLAN_METADATA_KEY = 'nao_plan_key';
@@ -23,20 +23,6 @@ type CloudMonthlyPriceDetails = Stripe.Price & {
 type CloudMonthlyPrice = CloudMonthlyPriceDetails & {
 	product: Stripe.Product;
 };
-
-interface CloudSubscriptionProjection {
-	billingPlan: typeof CLOUD_MONTHLY_PLAN.key;
-	billingStatus: BillingStatus;
-	stripeCustomerId: string;
-	stripeSubscriptionId: string;
-	stripePriceId: string;
-	trialStartedAt: Date | null;
-	trialEndsAt: Date | null;
-	currentPeriodEndsAt: Date | null;
-	cancellationScheduled: boolean;
-	hasDefaultPaymentMethod: boolean;
-	billingAccessEndsAt: Date | null;
-}
 
 interface CloudInvoice {
 	id: string;
@@ -57,7 +43,9 @@ export class CloudSubscriptionUnavailableError extends Error {}
 export class CloudSubscriptionResumeError extends Error {}
 
 let stripeClient: Stripe | undefined;
-let cloudMonthlyPriceCache: { lookupKey: string; expiresAt: number; price: Promise<CloudMonthlyPrice> } | undefined;
+let cloudMonthlyPriceCache:
+	| { lookupKey: string; productId: string; expiresAt: number; price: Promise<CloudMonthlyPrice> }
+	| undefined;
 
 export async function createCloudCustomer(input: {
 	organizationId: string;
@@ -77,8 +65,7 @@ export async function createCloudCustomer(input: {
 export async function createCloudCheckoutSession(input: {
 	organizationId: string;
 	stripeCustomerId: string;
-	trialEndsAt: Date | null;
-	trialDays?: number;
+	trialDays: number;
 }): Promise<string> {
 	if ((await listCloudSubscriptions(input.stripeCustomerId)).length > 0) {
 		throw new CloudInitialCheckoutUnavailableError(
@@ -88,7 +75,7 @@ export async function createCloudCheckoutSession(input: {
 	return createSubscriptionCheckoutSession({
 		...input,
 		kind: 'initial',
-		operationKey: input.trialEndsAt?.getTime().toString() ?? `trial-${input.trialDays ?? 0}`,
+		operationKey: `trial-${input.trialDays}`,
 	});
 }
 
@@ -108,7 +95,6 @@ export async function createCloudResubscribeSession(input: {
 		...input,
 		kind: 'resubscribe',
 		operationKey: latestSubscription.id,
-		trialEndsAt: null,
 	});
 }
 
@@ -117,14 +103,13 @@ async function createSubscriptionCheckoutSession(input: {
 	stripeCustomerId: string;
 	kind: 'initial' | 'resubscribe';
 	operationKey: string;
-	trialEndsAt: Date | null;
 	trialDays?: number;
 }): Promise<string> {
 	const matchesCheckout = (session: Stripe.Checkout.Session) =>
 		session.mode === 'subscription' &&
 		session.metadata?.[ORGANIZATION_METADATA_KEY] === input.organizationId &&
 		session.metadata?.[PLAN_METADATA_KEY] === CLOUD_MONTHLY_PLAN.key &&
-		matchesCheckoutKind(session.metadata?.[CHECKOUT_KIND_METADATA_KEY], input.kind);
+		session.metadata?.[CHECKOUT_KIND_METADATA_KEY] === input.kind;
 	const existingSession = (
 		await getStripeClient().checkout.sessions.list({
 			customer: input.stripeCustomerId,
@@ -145,19 +130,18 @@ async function createSubscriptionCheckoutSession(input: {
 
 	const price = await getCloudMonthlyPrice();
 	const billingUrl = billingPageUrl();
-	const trialEnd =
-		input.trialEndsAt && input.trialEndsAt.getTime() >= Date.now() + STRIPE_CHECKOUT_MIN_TRIAL_MS
-			? Math.floor(input.trialEndsAt.getTime() / 1000)
-			: null;
-	const hasTrial = trialEnd !== null || input.trialDays !== undefined;
 	const session = await getStripeClient().checkout.sessions.create(
 		{
 			mode: 'subscription',
 			customer: input.stripeCustomerId,
 			customer_update: { address: 'auto', name: 'auto' },
+			automatic_tax: { enabled: true },
+			tax_id_collection: { enabled: true },
+			billing_address_collection: 'required',
 			client_reference_id: input.organizationId,
 			line_items: [{ price: price.id, quantity: 1 }],
-			payment_method_collection: hasTrial ? 'if_required' : 'always',
+			payment_method_collection: 'always',
+			payment_method_types: ['card'],
 			metadata: {
 				[ORGANIZATION_METADATA_KEY]: input.organizationId,
 				[PLAN_METADATA_KEY]: CLOUD_MONTHLY_PLAN.key,
@@ -168,17 +152,12 @@ async function createSubscriptionCheckoutSession(input: {
 					[ORGANIZATION_METADATA_KEY]: input.organizationId,
 					[PLAN_METADATA_KEY]: CLOUD_MONTHLY_PLAN.key,
 				},
-				...(trialEnd
+				...(input.trialDays !== undefined
 					? {
-							trial_end: trialEnd,
+							trial_period_days: input.trialDays,
 							trial_settings: { end_behavior: { missing_payment_method: 'pause' as const } },
 						}
-					: input.trialDays !== undefined
-						? {
-								trial_period_days: input.trialDays,
-								trial_settings: { end_behavior: { missing_payment_method: 'pause' as const } },
-							}
-						: {}),
+					: {}),
 			},
 			success_url: `${billingUrl}?checkout=${input.kind === 'initial' ? 'success' : 'subscribed'}`,
 			cancel_url: `${billingUrl}?checkout=canceled`,
@@ -284,21 +263,18 @@ export async function hasCloudDefaultPaymentMethod(stripeCustomerIdValue: string
 }
 
 export async function listCloudSubscriptions(stripeCustomerIdValue: string): Promise<Stripe.Subscription[]> {
-	const price = await getCloudMonthlyPrice();
+	const productId = configuredCloudProductId();
 	const subscriptions = await getStripeClient().subscriptions.list({
 		customer: stripeCustomerIdValue,
 		status: 'all',
 		limit: 100,
 	});
-	return subscriptions.data.filter((subscription) => hasProduct(subscription, stripeProductId(price.product)));
+	return subscriptions.data.filter((subscription) => hasProduct(subscription, productId));
 }
 
 export async function getCloudSubscription(stripeSubscriptionId: string): Promise<Stripe.Subscription> {
-	const [price, subscription] = await Promise.all([
-		getCloudMonthlyPrice(),
-		getStripeClient().subscriptions.retrieve(stripeSubscriptionId),
-	]);
-	if (!hasProduct(subscription, stripeProductId(price.product))) {
+	const subscription = await getStripeClient().subscriptions.retrieve(stripeSubscriptionId);
+	if (!hasProduct(subscription, configuredCloudProductId())) {
 		throw new Error(`Stripe Subscription "${stripeSubscriptionId}" does not use the configured cloud Product`);
 	}
 	return subscription;
@@ -319,17 +295,11 @@ export async function getStripeEvent(stripeEventId: string): Promise<Stripe.Even
 	return getStripeClient().events.retrieve(stripeEventId);
 }
 
-export async function cloudSubscriptionProjection(
-	subscription: Stripe.Subscription,
-): Promise<CloudSubscriptionProjection> {
+export async function cloudSubscriptionProjection(subscription: Stripe.Subscription): Promise<SubscriptionProjection> {
 	if (!isBillingStatus(subscription.status)) {
 		throw new Error(`Unsupported Stripe subscription status "${subscription.status}"`);
 	}
-	const price = await getCloudMonthlyPrice();
-	const productId = stripeProductId(price.product);
-	const item = subscription.items.data.find(
-		(candidate) => stripeProductId(candidate.price.product) === productId && candidate.quantity === 1,
-	);
+	const item = cloudProductItem(subscription, configuredCloudProductId());
 	if (!item) {
 		throw new Error(`Stripe Subscription "${subscription.id}" has no cloud plan item`);
 	}
@@ -368,14 +338,20 @@ export async function getCloudMonthlyPrice(): Promise<CloudMonthlyPrice> {
 	if (!lookupKey) {
 		throw new Error('STRIPE_CLOUD_MONTHLY_PRICE_LOOKUP_KEY is required when cloud billing is enabled');
 	}
+	const productId = configuredCloudProductId();
 
-	if (cloudMonthlyPriceCache?.lookupKey === lookupKey && cloudMonthlyPriceCache.expiresAt > Date.now()) {
+	if (
+		cloudMonthlyPriceCache?.lookupKey === lookupKey &&
+		cloudMonthlyPriceCache.productId === productId &&
+		cloudMonthlyPriceCache.expiresAt > Date.now()
+	) {
 		return cloudMonthlyPriceCache.price;
 	}
 
-	const price = fetchCloudMonthlyPrice(lookupKey);
+	const price = fetchCloudMonthlyPrice(lookupKey, productId);
 	cloudMonthlyPriceCache = {
 		lookupKey,
+		productId,
 		expiresAt: Date.now() + CLOUD_MONTHLY_PRICE_CACHE_TTL_MS,
 		price,
 	};
@@ -389,7 +365,7 @@ export async function getCloudMonthlyPrice(): Promise<CloudMonthlyPrice> {
 	}
 }
 
-async function fetchCloudMonthlyPrice(lookupKey: string): Promise<CloudMonthlyPrice> {
+async function fetchCloudMonthlyPrice(lookupKey: string, productId: string): Promise<CloudMonthlyPrice> {
 	const [price] = (
 		await getStripeClient().prices.list({
 			active: true,
@@ -402,9 +378,9 @@ async function fetchCloudMonthlyPrice(lookupKey: string): Promise<CloudMonthlyPr
 	if (!price) {
 		throw new Error(`No active Stripe Price found for lookup key "${lookupKey}"`);
 	}
-	if (!isExpectedCloudMonthlyPrice(price)) {
+	if (!isExpectedCloudMonthlyPrice(price) || price.product.id !== productId) {
 		throw new Error(
-			`Stripe Price "${price.id}" must belong to an active Product and be a fixed positive EUR monthly licensed Price`,
+			`Stripe Price "${price.id}" must belong to configured active Product "${productId}" and be a fixed positive ${CLOUD_MONTHLY_PLAN.currency.toUpperCase()} monthly licensed Price`,
 		);
 	}
 
@@ -431,7 +407,7 @@ export async function getCloudBillingPlans(
 	const subscriptionPrice = await getStripeClient().prices.retrieve(stripePriceId);
 	if (
 		!isCloudMonthlyPriceDetails(subscriptionPrice) ||
-		stripeProductId(subscriptionPrice.product) !== availablePrice.product.id
+		stripeProductId(subscriptionPrice.product) !== configuredCloudProductId()
 	) {
 		throw new Error(`Stripe Price "${stripePriceId}" is not a valid historical cloud Price`);
 	}
@@ -460,16 +436,19 @@ function billingPageUrl(): string {
 	return new URL('/settings/organization/billing', env.BETTER_AUTH_URL).toString();
 }
 
-function matchesCheckoutKind(value: string | undefined, kind: 'initial' | 'resubscribe'): boolean {
-	return kind === 'initial'
-		? !value || value === 'trial' || value === kind
-		: value === 'subscription' || value === kind;
+function hasProduct(subscription: Stripe.Subscription, productId: string): boolean {
+	return cloudProductItem(subscription, productId) !== null;
 }
 
-function hasProduct(subscription: Stripe.Subscription, productId: string): boolean {
-	return subscription.items.data.some(
-		(item) => stripeProductId(item.price.product) === productId && item.quantity === 1,
-	);
+function cloudProductItem(subscription: Stripe.Subscription, productId: string): Stripe.SubscriptionItem | null {
+	return subscription.items.data.find((item) => stripeProductId(item.price.product) === productId) ?? null;
+}
+
+function configuredCloudProductId(): string {
+	if (!env.STRIPE_CLOUD_PRODUCT_ID) {
+		throw new Error('STRIPE_CLOUD_PRODUCT_ID is required when cloud billing is enabled');
+	}
+	return env.STRIPE_CLOUD_PRODUCT_ID;
 }
 
 function stripeCustomerId(customer: string | Stripe.Customer | Stripe.DeletedCustomer): string {
@@ -507,6 +486,7 @@ function isExpectedCloudMonthlyPrice(price: Stripe.Price): price is CloudMonthly
 		typeof price.product !== 'string' &&
 		!price.product.deleted &&
 		price.product.active &&
+		price.currency === CLOUD_MONTHLY_PLAN.currency &&
 		isCloudMonthlyPriceDetails(price)
 	);
 }
@@ -514,7 +494,6 @@ function isExpectedCloudMonthlyPrice(price: Stripe.Price): price is CloudMonthly
 function isCloudMonthlyPriceDetails(price: Stripe.Price): price is CloudMonthlyPriceDetails {
 	return (
 		price.billing_scheme === 'per_unit' &&
-		price.currency === CLOUD_MONTHLY_PLAN.currency &&
 		typeof price.unit_amount === 'number' &&
 		price.unit_amount > 0 &&
 		price.type === 'recurring' &&
@@ -528,5 +507,6 @@ function cloudBillingPlan(price: CloudMonthlyPriceDetails): CloudBillingPlan {
 	return {
 		...CLOUD_MONTHLY_PLAN,
 		amount: price.unit_amount,
+		currency: price.currency,
 	};
 }

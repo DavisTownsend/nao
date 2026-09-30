@@ -42,13 +42,9 @@ class EmailService {
 		return this.enabled;
 	}
 
-	public async sendEmail(
-		to: string,
-		email: CreatedEmail,
-		options: { throwOnError?: boolean } = {},
-	): Promise<boolean> {
+	public async sendEmail(to: string, email: CreatedEmail, options: { throwOnError?: boolean } = {}): Promise<void> {
 		if (!this.isEnabled() || !this.transporter) {
-			return false;
+			return;
 		}
 
 		try {
@@ -59,13 +55,11 @@ class EmailService {
 				html: email.html,
 				attachments: email.attachments,
 			});
-			return true;
 		} catch (error) {
 			logger.error(`Failed to send email to ${to}: ${String(error)}`, { source: 'system', context: { to } });
 			if (options.throwOnError) {
 				throw error;
 			}
-			return false;
 		}
 	}
 }

@@ -27,8 +27,8 @@ export const stripeWebhookRoutes = async (app: App) => {
 			return reply.status(400).send({ error: 'Invalid Stripe webhook signature' });
 		}
 
-		if (env.MODE !== 'prod' && event.livemode) {
-			return reply.status(400).send({ error: 'Live Stripe events are not accepted in this environment' });
+		if (event.livemode !== /^[rs]k_live_/.test(env.STRIPE_SECRET_KEY ?? '')) {
+			return reply.status(400).send({ error: 'Stripe event mode does not match the configured Stripe key' });
 		}
 
 		const stripeObject = event.data.object as { id?: string };

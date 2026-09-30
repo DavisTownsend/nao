@@ -3,7 +3,10 @@ import type Stripe from 'stripe';
 import * as billingQueries from '../queries/billing.queries';
 import * as organizationQueries from '../queries/organization.queries';
 import { isTerminalBillingStatus } from '../types/billing';
+import { logger } from '../utils/logger';
 import { cloudSubscriptionProjection, hasCloudDefaultPaymentMethod, listCloudSubscriptions } from './stripe.service';
+
+const CURRENT_STATUS_PRIORITY = ['active', 'trialing', 'past_due', 'paused', 'unpaid', 'incomplete'];
 
 interface CloudBillingReconciliationResult {
 	applied: boolean;
@@ -20,7 +23,8 @@ export async function reconcileCloudBillingCustomer(input: {
 	}
 	const claim = await billingQueries.claimBillingSync(organization.id, input.stripeCustomerId);
 	const subscriptions = await listCloudSubscriptions(input.stripeCustomerId);
-	const subscription = selectCloudSubscription(subscriptions);
+	const subscription = selectCloudSubscription(subscriptions, claim.organization.stripeSubscriptionId);
+	logDuplicateCurrentSubscriptions(input.stripeCustomerId, subscriptions, subscription);
 
 	if (!subscription) {
 		return {
@@ -66,16 +70,50 @@ async function resolveOrganization(stripeCustomerId: string, organizationIdHint?
 	return billingQueries.attachStripeCustomer(organization.id, stripeCustomerId);
 }
 
-function selectCloudSubscription(subscriptions: Stripe.Subscription[]): Stripe.Subscription | null {
+function selectCloudSubscription(
+	subscriptions: Stripe.Subscription[],
+	preferredSubscriptionId?: string | null,
+): Stripe.Subscription | null {
 	const current = subscriptions.filter((subscription) => !isTerminalBillingStatus(subscription.status));
-	if (current.length > 1) {
-		throw new Error('Stripe Customer has multiple current cloud subscriptions');
-	}
-	if (current[0]) {
-		return current[0];
+	if (current.length > 0) {
+		return [...current].sort((left, right) => {
+			const statusDifference = currentStatusPriority(left.status) - currentStatusPriority(right.status);
+			if (statusDifference !== 0) {
+				return statusDifference;
+			}
+			if (left.id === preferredSubscriptionId) {
+				return -1;
+			}
+			if (right.id === preferredSubscriptionId) {
+				return 1;
+			}
+			return left.created - right.created || left.id.localeCompare(right.id);
+		})[0];
 	}
 
 	return [...subscriptions].sort((left, right) => right.created - left.created)[0] ?? null;
+}
+
+function currentStatusPriority(status: string): number {
+	const priority = CURRENT_STATUS_PRIORITY.indexOf(status);
+	return priority === -1 ? CURRENT_STATUS_PRIORITY.length : priority;
+}
+
+function logDuplicateCurrentSubscriptions(
+	stripeCustomerId: string,
+	subscriptions: Stripe.Subscription[],
+	selectedSubscription: Stripe.Subscription | null,
+): void {
+	const currentIds = subscriptions
+		.filter((subscription) => !isTerminalBillingStatus(subscription.status))
+		.map((subscription) => subscription.id);
+	if (currentIds.length < 2 || !selectedSubscription) {
+		return;
+	}
+	logger.error(`Stripe Customer "${stripeCustomerId}" has multiple current cloud subscriptions`, {
+		source: 'system',
+		context: { currentSubscriptionIds: currentIds, selectedSubscriptionId: selectedSubscription.id },
+	});
 }
 
 function assertSubscriptionOwnership(

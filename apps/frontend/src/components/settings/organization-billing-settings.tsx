@@ -12,7 +12,6 @@ import {
 	formatInvoiceLabel,
 	getBillingManagementDescription,
 	getBillingPortalButtonLabel,
-	preservesRemainingTrial,
 } from '@/lib/billing-display';
 
 type BillingState = ReturnType<typeof useOrganizationBilling>;
@@ -128,18 +127,9 @@ function CurrentPlanCard({ billingState }: { billingState: BillingState }) {
 
 function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 	const { billing, hasStripeSubscription, plan } = billingState;
-	if (!billing.data || hasStripeSubscription || !plan) {
+	if (!billing.data || hasStripeSubscription || !plan || !billing.data.trialAvailable) {
 		return null;
 	}
-
-	const legacyTrialWindowActive = billing.data.legacyTrialWindowActive;
-	const actionDescription = billing.data.trialAvailable
-		? `Continue to Stripe to confirm this organization's ${plan.trialDays}-day free trial. No payment method is required.`
-		: !legacyTrialWindowActive
-			? 'Your free trial has ended. Subscribe to restore access; billing starts immediately.'
-			: preservesRemainingTrial(billing.data.trialEndsAt)
-				? 'Complete Stripe Checkout to confirm the free trial. Access begins only after Stripe confirms it.'
-				: 'Less than 48 hours remain on your free trial. Subscribe now and billing starts immediately.';
 
 	return (
 		<SettingsCard title='Billing setup'>
@@ -160,37 +150,22 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 						label='Billing period'
 						value={`Every ${formatBillingInterval(plan.interval, plan.intervalCount)}`}
 					/>
-					<PlanDetail
-						label='Free trial'
-						value={
-							billing.data.trialAvailable
-								? `${plan.trialDays} days, starting after Stripe Checkout`
-								: legacyTrialWindowActive
-									? `Waiting for Stripe Checkout; reserved until ${formatBillingDate(billing.data.trialEndsAt)}`
-									: `Ended ${formatBillingDate(billing.data.trialEndsAt)}`
-						}
-					/>
+					<PlanDetail label='Free trial' value={`${plan.trialDays} days, starting after Stripe Checkout`} />
 					<PlanDetail label='Currency' value={plan.currency.toUpperCase()} />
 				</dl>
 
 				<div className='flex flex-col items-start gap-3 border-t border-border pt-5'>
-					<p className='text-sm text-muted-foreground'>{actionDescription}</p>
+					<p className='text-sm text-muted-foreground'>
+						Continue to Stripe to add a card and confirm this organization&apos;s {plan.trialDays}-day free
+						trial. Billing starts after the trial.
+					</p>
 					{billing.data.canManageBilling ? (
-						billing.data.trialAvailable ? (
-							<Button
-								onClick={billingState.openTrialCheckout}
-								isLoading={billingState.isTrialCheckoutPending}
-							>
-								Start 14-day free trial in Stripe
-							</Button>
-						) : (
-							<Button
-								onClick={billingState.openLegacyTrialCheckout}
-								isLoading={billingState.isLegacyTrialCheckoutPending}
-							>
-								{legacyTrialWindowActive ? 'Finish trial setup in Stripe' : 'Subscribe to nao Cloud'}
-							</Button>
-						)
+						<Button
+							onClick={billingState.openTrialCheckout}
+							isLoading={billingState.isTrialCheckoutPending}
+						>
+							Start 14-day free trial in Stripe
+						</Button>
 					) : (
 						<p className='text-sm text-muted-foreground'>
 							Only an organization admin can subscribe or add billing details.
@@ -201,11 +176,6 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 							{billingState.trialCheckoutError}
 						</p>
 					)}
-					{billingState.legacyTrialCheckoutError && (
-						<p className='text-sm text-destructive' role='alert'>
-							{billingState.legacyTrialCheckoutError}
-						</p>
-					)}
 				</div>
 			</div>
 		</SettingsCard>
@@ -214,23 +184,15 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 
 function PlanDetailsCard({ billingState }: { billingState: BillingState }) {
 	const { billing, hasStripeSubscription, isHistoricalSubscription, plan, status } = billingState;
-	if (!billing.data || (!hasStripeSubscription && status !== 'trialing')) {
+	if (!billing.data || !hasStripeSubscription) {
 		return null;
 	}
-	if (billingState.isEndingAtPeriodEnd || billingState.isLegacyTrialExpired) {
+	if (billingState.isEndingAtPeriodEnd) {
 		return null;
 	}
 
 	return (
-		<SettingsCard
-			title={
-				isHistoricalSubscription
-					? 'Subscription history'
-					: hasStripeSubscription
-						? 'Subscription details'
-						: 'Trial details'
-			}
-		>
+		<SettingsCard title={isHistoricalSubscription ? 'Subscription history' : 'Subscription details'}>
 			{isHistoricalSubscription && plan && (
 				<div className='mb-5 flex flex-col gap-1'>
 					<p className='font-medium text-foreground'>{plan.name}</p>
@@ -241,7 +203,7 @@ function PlanDetailsCard({ billingState }: { billingState: BillingState }) {
 				</div>
 			)}
 			<dl className='grid gap-3 text-sm sm:grid-cols-2'>
-				{status === 'trialing' && !billingState.isLegacyTrialExpired ? (
+				{status === 'trialing' ? (
 					<PlanDetail label='Trial ends' value={formatBillingDate(billing.data.trialEndsAt)} />
 				) : isHistoricalSubscription ? (
 					<PlanDetail
