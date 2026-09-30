@@ -29,7 +29,7 @@ vi.mock('../src/queries/story.queries', () => ({
 	})),
 }));
 vi.mock('../src/queries/story-delivery.queries', () => ({
-	getByStoryId: vi.fn(async () => ({ channels: ['in_app'], enabled: true })),
+	getByStoryId: vi.fn(async () => ({ channels: ['email'], enabled: true })),
 }));
 vi.mock('../src/queries/user.queries', () => ({
 	getUserName: vi.fn(async () => 'Story owner'),
@@ -43,7 +43,7 @@ vi.mock('../src/services/notification.service', () => ({
 	notifyUsers: mocks.notifyUsers,
 }));
 vi.mock('../src/services/story-recipients', () => ({
-	resolveDeliveryRecipientUserIds: vi.fn(async () => ['user-id']),
+	resolveDeliveryRecipientUserIds: vi.fn(async () => ['recipient-user-id']),
 }));
 vi.mock('../src/utils/keyed-lock', () => ({
 	withKeyedLock: vi.fn(async (_key: string, callback: () => Promise<void>) => callback()),
@@ -79,5 +79,9 @@ it('delivers the refreshed story when the project has billing access', async () 
 	await runScheduledStoryDelivery('story-id');
 
 	expect(mocks.refreshStoryData).toHaveBeenCalledWith('chat-id', 'story-slug');
-	expect(mocks.notifyUsers).toHaveBeenCalledOnce();
+	expect(mocks.notifyUsers).toHaveBeenCalledWith(
+		['recipient-user-id'],
+		expect.objectContaining({ channels: ['email'] }),
+		{ skipDeliveries: [], throwOnChannelError: true },
+	);
 });

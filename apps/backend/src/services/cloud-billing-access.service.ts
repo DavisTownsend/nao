@@ -2,6 +2,8 @@ import { isCloudBillingEnabled } from '../env';
 import type { BillingStatus } from '../types/billing';
 import { HandlerError } from '../utils/error';
 
+const ACTIVE_RECONCILIATION_GRACE_MS = 24 * 60 * 60 * 1000;
+
 type CloudBillingEntitlement = {
 	billingStatus: BillingStatus | null;
 	stripeSubscriptionId: string | null;
@@ -9,6 +11,7 @@ type CloudBillingEntitlement = {
 	currentPeriodEndsAt: Date | null;
 	billingAccessEndsAt: Date | null;
 	cancellationScheduled?: boolean | null;
+	hasDefaultPaymentMethod?: boolean | null;
 };
 
 class CloudBillingAccessRestrictedError extends HandlerError {
@@ -35,14 +38,18 @@ export function hasCloudBillingAccess(
 			if (entitlement.stripeSubscriptionId === null) {
 				return false;
 			}
-			return (
-				isAfter(entitlement.trialEndsAt, now) &&
-				(!entitlement.billingAccessEndsAt || isAfter(entitlement.billingAccessEndsAt, now))
-			);
+			return entitlement.hasDefaultPaymentMethod && !entitlement.cancellationScheduled
+				? isAfterWithGrace(entitlement.trialEndsAt, now, ACTIVE_RECONCILIATION_GRACE_MS)
+				: isAfter(entitlement.trialEndsAt, now) &&
+						(!entitlement.billingAccessEndsAt || isAfter(entitlement.billingAccessEndsAt, now));
 		case 'active':
 			return entitlement.cancellationScheduled
 				? isAfter(entitlement.billingAccessEndsAt ?? entitlement.currentPeriodEndsAt, now)
-				: isAfter(entitlement.currentPeriodEndsAt ?? entitlement.billingAccessEndsAt, now);
+				: isAfterWithGrace(
+						entitlement.currentPeriodEndsAt ?? entitlement.billingAccessEndsAt,
+						now,
+						ACTIVE_RECONCILIATION_GRACE_MS,
+					);
 		default:
 			return false;
 	}
@@ -83,4 +90,8 @@ export async function assertProjectCloudBillingAccess(projectId: string): Promis
 
 function isAfter(date: Date | null, now: Date): boolean {
 	return date !== null && date.getTime() > now.getTime();
+}
+
+function isAfterWithGrace(date: Date | null, now: Date, graceMs: number): boolean {
+	return date !== null && date.getTime() + graceMs > now.getTime();
 }

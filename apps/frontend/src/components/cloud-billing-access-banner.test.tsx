@@ -6,25 +6,31 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CloudBillingAccessBanner } from './cloud-billing-access-banner';
 
 const mocks = vi.hoisted(() => ({
+	cloudBillingEnabled: true,
 	invalidateQueries: vi.fn(async () => undefined),
 	navigate: vi.fn(async () => undefined),
 }));
 
 vi.mock('@tanstack/react-query', () => ({
-	useQuery: (options: { queryKey: string[] }) =>
-		options.queryKey[0] === 'config'
-			? { data: { cloudBillingEnabled: true } }
-			: {
-					data: {
-						canManageBilling: true,
-						hasAccess: false,
-						organizationId: 'project-organization',
-						requiresBillingAction: true,
-						status: 'trialing',
-						trialAvailable: false,
-						trialEndsAt: null,
-					},
-				},
+	useQuery: (options: { queryKey: string[]; enabled?: boolean }) => {
+		if (options.queryKey[0] === 'config') {
+			return { data: { cloudBillingEnabled: mocks.cloudBillingEnabled } };
+		}
+		if (options.enabled === false) {
+			return { data: undefined };
+		}
+		return {
+			data: {
+				canManageBilling: true,
+				hasAccess: false,
+				organizationId: 'project-organization',
+				requiresBillingAction: true,
+				status: 'trialing',
+				trialAvailable: false,
+				trialEndsAt: null,
+			},
+		};
+	},
 	useQueryClient: () => ({ invalidateQueries: mocks.invalidateQueries }),
 }));
 
@@ -40,6 +46,7 @@ vi.mock('@/main', () => ({
 }));
 
 beforeEach(() => {
+	mocks.cloudBillingEnabled = true;
 	const values = new Map<string, string>();
 	vi.stubGlobal('localStorage', {
 		getItem: (key: string) => values.get(key) ?? null,
@@ -51,6 +58,14 @@ afterEach(() => {
 	cleanup();
 	vi.clearAllMocks();
 	vi.unstubAllGlobals();
+});
+
+it('stays hidden when cloud billing is disabled', () => {
+	mocks.cloudBillingEnabled = false;
+
+	render(<CloudBillingAccessBanner />);
+
+	expect(screen.queryByRole('alert')).toBeNull();
 });
 
 it('selects the project organization before opening billing management', async () => {

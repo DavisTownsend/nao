@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useId } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Plus, PencilRuler, Database, Paperclip, AlertTriangle, Shield, Check } from 'lucide-react';
 import { ATTACHMENT_ACCEPT } from '@nao/shared/attachments';
 import { Button, ChatButton, MicButton } from './ui/button';
@@ -33,8 +33,8 @@ import { parseBudgetError } from '@/lib/ai';
 import { cn } from '@/lib/utils';
 import { useChatId } from '@/hooks/use-chat-id';
 import { useModelSelection } from '@/hooks/use-model-selection';
+import { useOpenOrganizationBilling } from '@/hooks/use-open-organization-billing';
 import { usePermissions } from '@/hooks/use-permissions';
-import { setActiveOrganizationId } from '@/lib/active-organization';
 import { getShortcut } from '@/lib/keyboard-shortcuts';
 import { matchesShortcut } from '@/lib/platform';
 import { messageQueueStore } from '@/stores/chat-message-queue';
@@ -116,7 +116,7 @@ function ChatInputBase({
 		selectedModel,
 	} = useAgentContext();
 	const navigate = useNavigate();
-	const queryClient = useQueryClient();
+	const openOrganizationBilling = useOpenOrganizationBilling();
 	const { canChatWithNaoData } = usePermissions();
 	const { storyCreationEnabled } = useEffectiveUserGroupFeatures();
 	const chatId = useChatId();
@@ -148,17 +148,6 @@ function ChatInputBase({
 	});
 	const chatInputRestore = useChatInputRestore(!!allowQueueing);
 	const effectivePlaceholder = isRunning && allowQueueing ? 'Add a follow-up...' : placeholder;
-	const openProjectBilling = useCallback(async () => {
-		if (!billingAccess.data) {
-			return;
-		}
-		setActiveOrganizationId(billingAccess.data.organizationId);
-		await queryClient.invalidateQueries();
-		await navigate({
-			to: '/settings/organization/billing',
-			search: { checkout: undefined, portal: undefined },
-		});
-	}, [billingAccess.data, navigate, queryClient]);
 
 	const agentSettings = useQuery(trpc.project.getAgentSettings.queryOptions());
 	const transcribeModels = useQuery(trpc.project.getKnownTranscribeModels.queryOptions());
@@ -412,11 +401,12 @@ function ChatInputBase({
 	);
 
 	if (billingAccess.data?.hasAccess === false) {
+		const { canManageBilling, organizationId, trialAvailable } = billingAccess.data;
 		return (
 			<ChatCloudAccessRestricted
-				canManageBilling={billingAccess.data.canManageBilling}
-				trialAvailable={billingAccess.data.trialAvailable}
-				onManageBilling={() => void openProjectBilling()}
+				canManageBilling={canManageBilling}
+				trialAvailable={trialAvailable}
+				onManageBilling={() => void openOrganizationBilling(organizationId)}
 				className={className}
 				onCancel={onCancel}
 			/>

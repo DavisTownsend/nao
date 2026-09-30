@@ -17,7 +17,7 @@ const instanceId = `worker-${crypto.randomUUID().slice(0, 8)}`;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let reclaimTimer: ReturnType<typeof setInterval> | null = null;
-let pollInFlight = false;
+let activePoll: Promise<void> | null = null;
 
 export function registerJob<T = unknown>(name: string, handler: JobHandler<T>): void {
 	handlers.set(name, handler as JobHandler);
@@ -90,17 +90,22 @@ export function stopScheduler(): void {
 	}
 }
 
-export function __resetSchedulerForTesting(): void {
+export async function __resetSchedulerForTesting(): Promise<void> {
 	stopScheduler();
+	await activePoll;
 	handlers.clear();
-	pollInFlight = false;
 }
 
-async function runPoll(): Promise<void> {
-	if (pollInFlight) {
-		return;
+function runPoll(): Promise<void> {
+	if (!activePoll) {
+		activePoll = executePoll().finally(() => {
+			activePoll = null;
+		});
 	}
-	pollInFlight = true;
+	return activePoll;
+}
+
+async function executePoll(): Promise<void> {
 	try {
 		const jobs = await scheduledJobQueries.claimDueJobs(new Date(), CLAIM_BATCH_SIZE, instanceId, [
 			...handlers.keys(),
@@ -108,8 +113,6 @@ async function runPoll(): Promise<void> {
 		await Promise.all(jobs.map((job) => executeJob(job)));
 	} catch (err) {
 		logger.error('Scheduler poll failed', { source: 'system', context: serializeError(err) });
-	} finally {
-		pollInFlight = false;
 	}
 }
 

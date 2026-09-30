@@ -27,8 +27,8 @@ describe('scheduler', () => {
 		mocks.reclaimStaleJobs.mockResolvedValue(0);
 	});
 
-	afterEach(() => {
-		__resetSchedulerForTesting();
+	afterEach(async () => {
+		await __resetSchedulerForTesting();
 		vi.useRealTimers();
 	});
 
@@ -70,5 +70,40 @@ describe('scheduler', () => {
 		expect(mocks.claimDueJobs).toHaveBeenCalledWith(new Date('2026-09-28T10:00:00.000Z'), 10, expect.any(String), [
 			'registered.job',
 		]);
+	});
+
+	it('waits for an active poll before resetting scheduler state', async () => {
+		let finishClaim: (jobs: []) => void = () => undefined;
+		mocks.claimDueJobs
+			.mockImplementationOnce(
+				() =>
+					new Promise<[]>((resolve) => {
+						finishClaim = resolve;
+					}),
+			)
+			.mockResolvedValueOnce([]);
+		registerJob('registered.job', vi.fn());
+		startScheduler();
+
+		let resetFinished = false;
+		const resetPromise = __resetSchedulerForTesting().then(() => {
+			resetFinished = true;
+		});
+		await Promise.resolve();
+		const resetFinishedWhilePollActive = resetFinished;
+		finishClaim([]);
+		await resetPromise;
+
+		expect(resetFinishedWhilePollActive).toBe(false);
+
+		startScheduler();
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(mocks.claimDueJobs).toHaveBeenLastCalledWith(
+			new Date('2026-09-28T10:00:00.000Z'),
+			10,
+			expect.any(String),
+			[],
+		);
 	});
 });
