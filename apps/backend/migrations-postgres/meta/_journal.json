@@ -498,6 +498,13 @@
       "when": 1790691342292,
       "tag": "0070_shared_story_group_access",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1790775949653,
+      "tag": "0071_story_certification",
+      "breakpoints": true
     }
   ]
 }
