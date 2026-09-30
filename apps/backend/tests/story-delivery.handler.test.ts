@@ -79,6 +79,7 @@ it('delivers the refreshed story when the project has billing access', async () 
 	await runScheduledStoryDelivery('story-id');
 
 	expect(mocks.refreshStoryData).toHaveBeenCalledWith('chat-id', 'story-slug');
+	expect(mocks.notifyUsers).toHaveBeenCalledOnce();
 	expect(mocks.notifyUsers).toHaveBeenCalledWith(
 		['recipient-user-id'],
 		expect.objectContaining({ channels: ['email'] }),
