@@ -1,13 +1,16 @@
-import { useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import { Clock3, TriangleAlert } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { setActiveOrganizationId } from '@/lib/active-organization';
 import { trpc } from '@/main';
 
 const TRIAL_WARNING_MS = 3 * 24 * 60 * 60 * 1000;
 
 export function CloudBillingAccessBanner() {
+	const navigate = useNavigate();
+	const queryClient = useQueryClient();
 	const config = useQuery(trpc.system.getPublicConfig.queryOptions());
 	const access = useQuery({
 		...trpc.billing.getAccess.queryOptions(),
@@ -19,6 +22,15 @@ export function CloudBillingAccessBanner() {
 	if (!notice) {
 		return null;
 	}
+
+	const openBilling = async () => {
+		setActiveOrganizationId(access.data!.organizationId);
+		await queryClient.invalidateQueries();
+		await navigate({
+			to: '/settings/organization/billing',
+			search: { checkout: undefined, portal: undefined },
+		});
+	};
 
 	return (
 		<div
@@ -40,10 +52,8 @@ export function CloudBillingAccessBanner() {
 				<span className='text-muted-foreground'>{notice.description}</span>
 			</div>
 			{access.data?.canManageBilling ? (
-				<Button asChild size='sm' variant='secondary'>
-					<Link to='/settings/organization/billing' search={{ checkout: undefined, portal: undefined }}>
-						Manage billing
-					</Link>
+				<Button size='sm' variant='secondary' onClick={() => void openBilling()}>
+					Manage billing
 				</Button>
 			) : (
 				<span className='text-xs text-muted-foreground'>Ask an organization admin to manage billing.</span>
@@ -55,6 +65,7 @@ export function CloudBillingAccessBanner() {
 function getAccessNotice(
 	access:
 		| {
+				organizationId: string;
 				hasAccess: boolean;
 				status: string | null;
 				trialEndsAt: Date | null;

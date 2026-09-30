@@ -76,6 +76,7 @@ const requestInput = z.object({ requestId: z.uuid() });
 
 export const billingRoutes = {
 	getAccess: cloudBillingAccessProcedure.query(({ ctx }) => ({
+		organizationId: ctx.organization.id,
 		hasAccess: hasCloudBillingAccess(true, ctx.organization),
 		status: ctx.organization.billingStatus,
 		trialEndsAt: ctx.organization.trialEndsAt,

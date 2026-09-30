@@ -53,10 +53,7 @@ export const getUserOrgMembership = async (
 	selectedOrganizationId?: string | null,
 ): Promise<UserOrgMembership | null> => {
 	if (selectedOrganizationId) {
-		const selectedMembership = await findUserOrgMembership(userId, selectedOrganizationId);
-		if (selectedMembership) {
-			return selectedMembership;
-		}
+		return findUserOrgMembership(userId, selectedOrganizationId);
 	}
 
 	return findUserOrgMembership(userId);

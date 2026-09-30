@@ -323,6 +323,16 @@ describe('cloud Checkout', () => {
 		);
 	});
 
+	it('rejects resubscription without Stripe subscription history', async () => {
+		await expect(
+			createCloudResubscribeSession({
+				organizationId: 'org-id',
+				stripeCustomerId: 'cus_cloud',
+			}),
+		).rejects.toThrow('no subscription history');
+		expect(stripeMocks.createCheckoutSession).not.toHaveBeenCalled();
+	});
+
 	it('rejects a new Checkout Session while a current subscription exists', async () => {
 		stripeMocks.listSubscriptions.mockResolvedValue({ data: [cloudSubscription({ status: 'active' })] });
 

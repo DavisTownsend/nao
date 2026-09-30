@@ -137,6 +137,18 @@ Trial Checkout requires and saves a card, but this alone does not block repeated
 
 `CLOUD_BILLING_ENABLED=true` does not configure Radar. Do not enable cloud billing for customers until the matching Stripe account has this control enabled.
 
+The application prevents a second trial for the same organization and Stripe Customer. It does not detect a person creating another account and personal organization. Radar must provide the cross-account, card, device, and risk signals for that case.
+
+### Abuse-control ownership
+
+Production protection is split across Stripe, deployment infrastructure, and nao:
+
+- **Stripe Dashboard:** enable Radar for saved payment methods, Free trial abuse, Smart Retries, billing emails, and a locked Customer Portal with plan switching and quantity changes disabled.
+- **Stripe dispute policy:** define how disputes, fraudulent charges, and refunds affect the subscription. The current webhook handler does not consume dispute or refund events. Use a tested Stripe Workflow or add application handling that moves the subscription to a status nao restricts.
+- **Deployment infrastructure:** rate-limit authenticated billing procedures by user and organization. The backend uses authorization and Stripe idempotency keys but does not include a billing endpoint rate limiter. Do not apply the same tight limit to signed Stripe webhooks, which must remain available for Stripe retries.
+- **nao application:** validates organization ownership, Product identity, webhook signatures and mode, and restricts access for non-entitled subscription statuses.
+- **Usage controls:** Stripe billing does not limit compute consumption or account sharing for an entitled organization. Any such limits belong to application or infrastructure usage controls.
+
 ### Webhook
 
 Register:
@@ -241,12 +253,14 @@ Complete the sandbox setup and test-clock scenarios first. Then switch the Strip
 4. Configure Stripe branding, public business details, support contact, statement descriptor, trial-ending reminders, receipts, failed-payment messages, payment-action messages, expiring-card reminders, and cancellation confirmations.
 5. Configure Smart Retries with the final action set to cancel or mark unpaid.
 6. Enable Radar for payment methods saved for future use, review the live backtest, and enable Free trial abuse.
-7. Create the live webhook destination with the exact event list above and API version from `stripe.service.ts`. Record its live `whsec_...` signing secret.
-8. Store the live secret key, Product ID, lookup key, webhook secret, and optional Portal configuration ID in the production secret manager.
-9. Back up the target database, verify `DB_URI`, apply migrations, and deploy with `CLOUD_BILLING_ENABLED=false`.
-10. Confirm the application starts, the billing route is absent while disabled, and the live key and webhook secret belong to the same Stripe mode and account.
-11. Set `CLOUD_BILLING_ENABLED=true`, redeploy, create one controlled live subscription, and verify Checkout tax, the saved card, webhook processing, the Stripe trial email, Portal access, and invoice rendering.
-12. Monitor application logs and Stripe Workbench during the rollout.
+7. Configure and test the dispute, fraud, and refund policy. Confirm it transitions affected subscriptions to a status nao restricts, or implement the missing application event handling before launch.
+8. Configure edge rate limits for authenticated billing procedures by user and organization without blocking normal Stripe webhook retries.
+9. Create the live webhook destination with the exact event list above and API version from `stripe.service.ts`. Record its live `whsec_...` signing secret.
+10. Store the live secret key, Product ID, lookup key, webhook secret, and optional Portal configuration ID in the production secret manager.
+11. Back up the target database, verify `DB_URI`, apply migrations, and deploy with `CLOUD_BILLING_ENABLED=false`.
+12. Confirm the application starts, `POST /api/billing/stripe/webhook` is absent while disabled, `billing.*` tRPC procedures return `NOT_FOUND`, and the live key and webhook secret belong to the same Stripe mode and account.
+13. Set `CLOUD_BILLING_ENABLED=true`, redeploy, create one controlled live subscription, and verify Checkout tax, the saved card, webhook processing, the Stripe trial email, Portal access, and invoice rendering.
+14. Monitor application logs, rate-limit metrics, disputes, refunds, Radar blocks, and Stripe Workbench during the rollout.
 
 To disable billing enforcement, set `CLOUD_BILLING_ENABLED=false` and redeploy. This does not remove billing state, webhook inbox rows, organizations, or Stripe subscriptions.
 
@@ -266,9 +280,12 @@ Use Stripe Billing test clocks to exercise:
 - trial pause and resume;
 - successful renewals and failed payments;
 - cancellation and resubscription;
+- the configured dispute and refund response;
 - duplicate or delayed events;
 - webhook downtime and recovery;
 - Dashboard-side subscription changes.
+
+Also verify that the Customer Portal cannot switch plans or quantities and repeated billing requests are throttled at the edge.
 
 Useful test cards:
 
@@ -309,6 +326,8 @@ Monitor:
 - unknown Products;
 - Stripe API error spikes;
 - reconciliation drift;
+- disputes and refunds;
+- billing endpoint rate-limit rejections;
 - failed Stripe email delivery.
 
 Recovery must support replaying an inbox event, resending an Event from Stripe Workbench, rotating secrets, correcting a Customer mapping, and disabling enforcement without erasing state.
@@ -330,5 +349,7 @@ Security requirements:
 - [Webhook security](https://docs.stripe.com/webhooks)
 - [Customer Portal](https://docs.stripe.com/customer-management)
 - [Billing test clocks](https://docs.stripe.com/billing/testing/test-clocks)
+- [Free trial abuse prevention](https://docs.stripe.com/radar/free-trial-abuse)
+- [Dispute automation](https://docs.stripe.com/disputes/responding)
 - [Smart Retries](https://docs.stripe.com/billing/revenue-recovery/smart-retries)
 - [Secret-key best practices](https://docs.stripe.com/keys-best-practices)

@@ -91,6 +91,7 @@ describe('billing.getAccess', () => {
 		);
 
 		await expect(caller().billing.getAccess()).resolves.toEqual({
+			organizationId: 'org-id',
 			hasAccess: true,
 			status: 'trialing',
 			trialEndsAt,
@@ -155,6 +156,7 @@ describe('billing.getStatus', () => {
 			hasDefaultPaymentMethod: true,
 			canManageBilling: true,
 			hasStripeSubscription: false,
+			resubscribeAvailable: false,
 			trialAvailable: false,
 		});
 	});
@@ -229,6 +231,16 @@ describe('billing.getStatus', () => {
 
 		await expect(caller('stale-project-id').billing.getStatus()).rejects.toMatchObject({ code: 'NOT_FOUND' });
 		expect(orgQueries.getUserOrgMembership).not.toHaveBeenCalled();
+	});
+
+	it('rejects an unknown selected organization instead of choosing another organization', async () => {
+		testState.membership = membership({ billingStatus: 'active' });
+		vi.mocked(orgQueries.getUserOrgMembership).mockResolvedValueOnce(null);
+
+		await expect(caller(null, 'stale-organization-id').billing.getStatus()).rejects.toMatchObject({
+			code: 'NOT_FOUND',
+		});
+		expect(stripeMocks.getBillingPlans).not.toHaveBeenCalled();
 	});
 
 	it('returns not found before authentication when cloud billing is disabled', async () => {

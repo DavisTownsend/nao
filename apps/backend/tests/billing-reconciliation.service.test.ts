@@ -114,7 +114,10 @@ describe('cloud billing reconciliation', () => {
 		expect(mocks.subscriptionProjection).toHaveBeenCalledWith(expect.objectContaining({ id: 'sub_newer' }));
 	});
 
-	it('keeps reconciliation moving and logs when Stripe has multiple current subscriptions', async () => {
+	it('prefers the persisted subscription and logs when Stripe has multiple current subscriptions', async () => {
+		const organization = buildOrganization({ stripeSubscriptionId: 'sub_old' });
+		mocks.getOrganizationByCustomer.mockResolvedValue(organization);
+		mocks.claimSync.mockResolvedValue({ organization, token: 'sync-token' });
 		mocks.listSubscriptions.mockResolvedValue([
 			buildSubscription({ id: 'sub_new', status: 'active', created: 10 }),
 			buildSubscription({ id: 'sub_old', status: 'active', created: 20 }),

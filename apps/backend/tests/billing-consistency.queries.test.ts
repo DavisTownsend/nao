@@ -128,6 +128,27 @@ describe('billing consistency queries', () => {
 		const [unregistered] = await db.select().from(s.scheduledJob).where(eq(s.scheduledJob.id, 'unregistered-job'));
 		expect(unregistered).toMatchObject({ status: 'pending', attempts: 0 });
 	});
+
+	it('does not claim a candidate renamed after selection', async () => {
+		await db.insert(s.scheduledJob).values({
+			id: 'renamed-job',
+			name: 'registered.job',
+			runAt: new Date(0),
+			status: 'pending',
+		});
+
+		queueMicrotask(() => {
+			db.update(s.scheduledJob)
+				.set({ name: 'unregistered.job' })
+				.where(eq(s.scheduledJob.id, 'renamed-job'))
+				.run();
+		});
+
+		await expect(claimDueJobs(new Date(), 10, 'worker-id', ['registered.job'])).resolves.toEqual([]);
+
+		const [renamed] = await db.select().from(s.scheduledJob).where(eq(s.scheduledJob.id, 'renamed-job'));
+		expect(renamed).toMatchObject({ name: 'unregistered.job', status: 'pending', attempts: 0 });
+	});
 });
 
 function activeProjection(): SubscriptionProjection {

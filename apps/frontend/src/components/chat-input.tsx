@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useId } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, PencilRuler, Database, Paperclip, AlertTriangle, Shield, Check } from 'lucide-react';
 import { ATTACHMENT_ACCEPT } from '@nao/shared/attachments';
 import { Button, ChatButton, MicButton } from './ui/button';
@@ -34,6 +34,7 @@ import { cn } from '@/lib/utils';
 import { useChatId } from '@/hooks/use-chat-id';
 import { useModelSelection } from '@/hooks/use-model-selection';
 import { usePermissions } from '@/hooks/use-permissions';
+import { setActiveOrganizationId } from '@/lib/active-organization';
 import { getShortcut } from '@/lib/keyboard-shortcuts';
 import { matchesShortcut } from '@/lib/platform';
 import { messageQueueStore } from '@/stores/chat-message-queue';
@@ -115,6 +116,7 @@ function ChatInputBase({
 		selectedModel,
 	} = useAgentContext();
 	const navigate = useNavigate();
+	const queryClient = useQueryClient();
 	const { canChatWithNaoData } = usePermissions();
 	const { storyCreationEnabled } = useEffectiveUserGroupFeatures();
 	const chatId = useChatId();
@@ -146,6 +148,17 @@ function ChatInputBase({
 	});
 	const chatInputRestore = useChatInputRestore(!!allowQueueing);
 	const effectivePlaceholder = isRunning && allowQueueing ? 'Add a follow-up...' : placeholder;
+	const openProjectBilling = useCallback(async () => {
+		if (!billingAccess.data) {
+			return;
+		}
+		setActiveOrganizationId(billingAccess.data.organizationId);
+		await queryClient.invalidateQueries();
+		await navigate({
+			to: '/settings/organization/billing',
+			search: { checkout: undefined, portal: undefined },
+		});
+	}, [billingAccess.data, navigate, queryClient]);
 
 	const agentSettings = useQuery(trpc.project.getAgentSettings.queryOptions());
 	const transcribeModels = useQuery(trpc.project.getKnownTranscribeModels.queryOptions());
@@ -403,6 +416,7 @@ function ChatInputBase({
 			<ChatCloudAccessRestricted
 				canManageBilling={billingAccess.data.canManageBilling}
 				trialAvailable={billingAccess.data.trialAvailable}
+				onManageBilling={() => void openProjectBilling()}
 				className={className}
 				onCancel={onCancel}
 			/>
@@ -522,11 +536,13 @@ function ChatInputBase({
 function ChatCloudAccessRestricted({
 	canManageBilling,
 	trialAvailable,
+	onManageBilling,
 	className,
 	onCancel,
 }: {
 	canManageBilling: boolean;
 	trialAvailable: boolean;
+	onManageBilling: () => void;
 	className?: string;
 	onCancel?: () => void;
 }) {
@@ -551,10 +567,8 @@ function ChatCloudAccessRestricted({
 					</Button>
 				)}
 				{canManageBilling ? (
-					<Button asChild size='sm' variant='secondary'>
-						<Link to='/settings/organization/billing' search={{ checkout: undefined, portal: undefined }}>
-							Manage billing
-						</Link>
+					<Button size='sm' variant='secondary' onClick={onManageBilling}>
+						Manage billing
 					</Button>
 				) : (
 					<span className='text-xs text-muted-foreground'>Ask an organization admin to manage billing.</span>

@@ -9,7 +9,6 @@ vi.mock('../src/queries/project.queries', () => ({}));
 const now = new Date('2026-09-24T12:00:00.000Z');
 const future = new Date('2026-09-25T12:00:00.000Z');
 const past = new Date('2026-09-23T12:00:00.000Z');
-const recentlyPast = new Date('2026-09-24T00:00:00.000Z');
 
 describe('cloud billing access entitlement', () => {
 	it.each([
@@ -42,41 +41,8 @@ describe('cloud billing access entitlement', () => {
 			false,
 		],
 		['trial missing its end', true, entitlement('trialing'), false],
-		[
-			'paying trial within conversion grace',
-			true,
-			entitlement('trialing', {
-				stripeSubscriptionId: 'sub_trial',
-				trialEndsAt: recentlyPast,
-				billingAccessEndsAt: recentlyPast,
-				hasDefaultPaymentMethod: true,
-			}),
-			true,
-		],
-		[
-			'canceling paying trial past its end',
-			true,
-			entitlement('trialing', {
-				stripeSubscriptionId: 'sub_trial',
-				trialEndsAt: recentlyPast,
-				billingAccessEndsAt: recentlyPast,
-				hasDefaultPaymentMethod: true,
-				cancellationScheduled: true,
-			}),
-			false,
-		],
-		[
-			'renewing active within reconciliation grace',
-			true,
-			entitlement('active', { currentPeriodEndsAt: recentlyPast }),
-			true,
-		],
-		[
-			'renewing active past reconciliation grace',
-			true,
-			entitlement('active', { currentPeriodEndsAt: past }),
-			false,
-		],
+		['active before its period end', true, entitlement('active', { currentPeriodEndsAt: future }), true],
+		['active past its period end', true, entitlement('active', { currentPeriodEndsAt: past }), false],
 		['active missing its period end', true, entitlement('active'), false],
 		[
 			'scheduled cancellation before access end',
@@ -110,7 +76,6 @@ function entitlement(
 		currentPeriodEndsAt: Date;
 		billingAccessEndsAt: Date;
 		cancellationScheduled: boolean;
-		hasDefaultPaymentMethod: boolean;
 	}> = {},
 ) {
 	return {

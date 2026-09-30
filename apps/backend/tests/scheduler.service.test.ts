@@ -17,7 +17,7 @@ vi.mock('../src/utils/logger', () => ({
 	serializeError: (error: unknown) => ({ error: String(error) }),
 }));
 
-import { registerJob, startScheduler, stopScheduler } from '../src/services/scheduler.service';
+import { __resetSchedulerForTesting, registerJob, startScheduler } from '../src/services/scheduler.service';
 
 describe('scheduler', () => {
 	beforeEach(() => {
@@ -28,7 +28,7 @@ describe('scheduler', () => {
 	});
 
 	afterEach(() => {
-		stopScheduler();
+		__resetSchedulerForTesting();
 		vi.useRealTimers();
 	});
 

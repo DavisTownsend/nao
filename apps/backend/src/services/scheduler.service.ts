@@ -90,6 +90,12 @@ export function stopScheduler(): void {
 	}
 }
 
+export function __resetSchedulerForTesting(): void {
+	stopScheduler();
+	handlers.clear();
+	pollInFlight = false;
+}
+
 async function runPoll(): Promise<void> {
 	if (pollInFlight) {
 		return;
