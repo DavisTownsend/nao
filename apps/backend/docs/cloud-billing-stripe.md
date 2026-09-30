@@ -86,6 +86,24 @@ flowchart LR
     Organization -.-> SubscriptionPrice
 ```
 
+### Early-customer promotion code
+
+Checkout accepts Stripe promotion codes. Stripe owns code validation, redemption limits, and discount calculation; nao does not store or validate codes.
+
+For the initial 50%-off customer offer:
+
+1. Create one Coupon for 50% off.
+2. Restrict the Coupon to the `nao Cloud` Product.
+3. Set its duration to **Forever** so the discount applies to the first paid invoice after the 14-day trial and every later invoice.
+4. Create a customer-facing Promotion Code for the Coupon. A Coupon ID cannot be entered in Checkout.
+5. Limit redemptions to the approved number of early customers and set a redemption deadline.
+
+A shared code with a global redemption limit can be claimed by any customer who knows it. Prefer a unique, hard-to-guess Promotion Code with one redemption for each approved customer when that risk matters.
+
+Do not use a `once` or `repeating` Coupon for this offer. Stripe creates a finalized USD 0 invoice when the trial starts, and repeating durations begin when the Coupon is applied. Those duration choices require separate sandbox validation if a future offer should cover a specific number of paid invoices.
+
+Create and test the Coupon and Promotion Codes separately in sandbox and live mode. Stripe account objects and settings do not carry between modes.
+
 ### Tax
 
 Checkout enables automatic tax, requires a billing address, and collects business tax IDs. Checkout creation fails until Stripe Tax is active in the matching Stripe account:
@@ -249,18 +267,19 @@ Complete the sandbox setup and test-clock scenarios first. Then switch the Strip
 
 1. Activate Stripe Tax, set the business origin, add required registrations, and verify invoice tax-ID display.
 2. Create the live `nao Cloud` Product and exclusive USD 2,000 monthly Price. Record the Product ID and lookup key.
-3. Configure the live Customer Portal: payment methods, billing addresses, tax IDs, invoices, and end-of-period cancellation enabled; plan switching and quantity changes disabled.
-4. Configure Stripe branding, public business details, support contact, statement descriptor, trial-ending reminders, receipts, failed-payment messages, payment-action messages, expiring-card reminders, and cancellation confirmations.
-5. Configure Smart Retries with the final action set to cancel or mark unpaid.
-6. Enable Radar for payment methods saved for future use, review the live backtest, and enable Free trial abuse.
-7. Configure and test the dispute, fraud, and refund policy. Confirm it transitions affected subscriptions to a status nao restricts, or implement the missing application event handling before launch.
-8. Configure edge rate limits for authenticated billing procedures by user and organization without blocking normal Stripe webhook retries.
-9. Create the live webhook destination with the exact event list above and API version from `stripe.service.ts`. Record its live `whsec_...` signing secret.
-10. Store the live secret key, Product ID, lookup key, webhook secret, and optional Portal configuration ID in the production secret manager.
-11. Back up the target database, verify `DB_URI`, apply migrations, and deploy with `CLOUD_BILLING_ENABLED=false`.
-12. Confirm the application starts, `POST /api/billing/stripe/webhook` is absent while disabled, `billing.*` tRPC procedures return `NOT_FOUND`, and the live key and webhook secret belong to the same Stripe mode and account.
-13. Set `CLOUD_BILLING_ENABLED=true`, redeploy, create one controlled live subscription, and verify Checkout tax, the saved card, webhook processing, the Stripe trial email, Portal access, and invoice rendering.
-14. Monitor application logs, rate-limit metrics, disputes, refunds, Radar blocks, and Stripe Workbench during the rollout.
+3. Create the live early-customer Coupon and Promotion Codes with the Product, duration, redemption, and deadline restrictions above.
+4. Configure the live Customer Portal: payment methods, billing addresses, tax IDs, invoices, and end-of-period cancellation enabled; plan switching and quantity changes disabled.
+5. Configure Stripe branding, public business details, support contact, statement descriptor, trial-ending reminders, receipts, failed-payment messages, payment-action messages, expiring-card reminders, and cancellation confirmations.
+6. Configure Smart Retries with the final action set to cancel or mark unpaid.
+7. Enable Radar for payment methods saved for future use, review the live backtest, and enable Free trial abuse.
+8. Configure and test the dispute, fraud, and refund policy. Confirm it transitions affected subscriptions to a status nao restricts, or implement the missing application event handling before launch.
+9. Configure edge rate limits for authenticated billing procedures by user and organization without blocking normal Stripe webhook retries.
+10. Create the live webhook destination with the exact event list above and API version from `stripe.service.ts`. Record its live `whsec_...` signing secret.
+11. Store the live secret key, Product ID, lookup key, webhook secret, and optional Portal configuration ID in the production secret manager.
+12. Back up the target database, verify `DB_URI`, apply migrations, and deploy with `CLOUD_BILLING_ENABLED=false`.
+13. Confirm the application starts, `POST /api/billing/stripe/webhook` is absent while disabled, `billing.*` tRPC procedures return `NOT_FOUND`, and the live key and webhook secret belong to the same Stripe mode and account.
+14. Set `CLOUD_BILLING_ENABLED=true`, redeploy, create one controlled live subscription, and verify Checkout tax, Promotion Code redemption, the saved card, webhook processing, the Stripe trial email, Portal access, and invoice rendering.
+15. Monitor application logs, rate-limit metrics, disputes, refunds, Radar blocks, and Stripe Workbench during the rollout.
 
 To disable billing enforcement, set `CLOUD_BILLING_ENABLED=false` and redeploy. This does not remove billing state, webhook inbox rows, organizations, or Stripe subscriptions.
 
@@ -275,6 +294,8 @@ stripe listen --forward-to localhost:5005/api/billing/stripe/webhook
 Use Stripe Billing test clocks to exercise:
 
 - card-required trial Checkout, Radar-blocked trial abuse, and abandoned Checkout;
+- successful early-customer Promotion Code redemption, the 14-day trial, and a 50%-discounted first paid invoice;
+- invalid, expired, and fully redeemed Promotion Codes, plus full-price Checkout without a code;
 - Stripe's trial-ending email three days before expiry;
 - payment-method updates;
 - trial pause and resume;
@@ -344,6 +365,7 @@ Security requirements:
 ## References
 
 - [Build subscriptions with Checkout](https://docs.stripe.com/payments/checkout/build-subscriptions)
+- [Coupons and promotion codes](https://docs.stripe.com/billing/subscriptions/coupons)
 - [Subscription trials](https://docs.stripe.com/billing/subscriptions/trials)
 - [Subscription webhooks and statuses](https://docs.stripe.com/billing/subscriptions/webhooks)
 - [Webhook security](https://docs.stripe.com/webhooks)

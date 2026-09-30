@@ -107,6 +107,7 @@ async function createSubscriptionCheckoutSession(input: {
 }): Promise<string> {
 	const matchesCheckout = (session: Stripe.Checkout.Session) =>
 		session.mode === 'subscription' &&
+		session.allow_promotion_codes === true &&
 		session.metadata?.[ORGANIZATION_METADATA_KEY] === input.organizationId &&
 		session.metadata?.[PLAN_METADATA_KEY] === CLOUD_MONTHLY_PLAN.key &&
 		session.metadata?.[CHECKOUT_KIND_METADATA_KEY] === input.kind;
@@ -140,6 +141,7 @@ async function createSubscriptionCheckoutSession(input: {
 			billing_address_collection: 'required',
 			client_reference_id: input.organizationId,
 			line_items: [{ price: price.id, quantity: 1 }],
+			allow_promotion_codes: true,
 			payment_method_collection: 'always',
 			payment_method_types: ['card'],
 			metadata: {
@@ -163,7 +165,7 @@ async function createSubscriptionCheckoutSession(input: {
 			cancel_url: `${billingUrl}?checkout=canceled`,
 		},
 		{
-			idempotencyKey: `cloud-checkout-${input.kind}-v4:${input.organizationId}:${input.operationKey}${latestExpiredSession ? `:${latestExpiredSession.id}` : ''}`,
+			idempotencyKey: `cloud-checkout-${input.kind}-v5:${input.organizationId}:${input.operationKey}${latestExpiredSession ? `:${latestExpiredSession.id}` : ''}`,
 		},
 	);
 	if (!session.url) {

@@ -210,6 +210,7 @@ describe('cloud Checkout', () => {
 		expect(stripeMocks.createCheckoutSession).toHaveBeenCalledWith(
 			expect.objectContaining({
 				line_items: [{ price: 'price_cloud_monthly', quantity: 1 }],
+				allow_promotion_codes: true,
 				payment_method_collection: 'always',
 				payment_method_types: ['card'],
 				automatic_tax: { enabled: true },
@@ -221,7 +222,40 @@ describe('cloud Checkout', () => {
 					trial_settings: { end_behavior: { missing_payment_method: 'pause' } },
 				},
 			}),
-			{ idempotencyKey: 'cloud-checkout-initial-v4:org-id:trial-14' },
+			{ idempotencyKey: 'cloud-checkout-initial-v5:org-id:trial-14' },
+		);
+	});
+
+	it('replaces an open Checkout Session that does not accept promotion codes', async () => {
+		stripeMocks.listCheckoutSessions.mockResolvedValueOnce({
+			data: [
+				{
+					mode: 'subscription',
+					allow_promotion_codes: false,
+					url: 'https://checkout.stripe.com/legacy',
+					metadata: {
+						nao_org_id: 'org-id',
+						nao_plan_key: 'cloud_monthly_v2',
+						nao_checkout_kind: 'initial',
+					},
+				},
+			],
+		});
+		stripeMocks.createCheckoutSession.mockResolvedValue({
+			url: 'https://checkout.stripe.com/promotion-codes',
+		});
+
+		await expect(
+			createCloudCheckoutSession({
+				organizationId: 'org-id',
+				stripeCustomerId: 'cus_cloud',
+				trialDays: 14,
+			}),
+		).resolves.toBe('https://checkout.stripe.com/promotion-codes');
+
+		expect(stripeMocks.createCheckoutSession).toHaveBeenCalledWith(
+			expect.objectContaining({ allow_promotion_codes: true }),
+			{ idempotencyKey: 'cloud-checkout-initial-v5:org-id:trial-14' },
 		);
 	});
 
@@ -231,6 +265,7 @@ describe('cloud Checkout', () => {
 				{
 					id: 'cs_expired',
 					mode: 'subscription',
+					allow_promotion_codes: true,
 					metadata: {
 						nao_org_id: 'org-id',
 						nao_plan_key: 'cloud_monthly_v2',
@@ -252,7 +287,7 @@ describe('cloud Checkout', () => {
 		).resolves.toBe('https://checkout.stripe.com/replacement');
 
 		expect(stripeMocks.createCheckoutSession).toHaveBeenCalledWith(expect.anything(), {
-			idempotencyKey: 'cloud-checkout-initial-v4:org-id:trial-14:cs_expired',
+			idempotencyKey: 'cloud-checkout-initial-v5:org-id:trial-14:cs_expired',
 		});
 	});
 
@@ -319,7 +354,7 @@ describe('cloud Checkout', () => {
 				},
 				success_url: 'https://cloud.getnao.io/settings/organization/billing?checkout=subscribed',
 			}),
-			{ idempotencyKey: 'cloud-checkout-resubscribe-v4:org-id:sub_cloud' },
+			{ idempotencyKey: 'cloud-checkout-resubscribe-v5:org-id:sub_cloud' },
 		);
 	});
 
