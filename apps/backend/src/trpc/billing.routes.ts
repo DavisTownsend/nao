@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod/v4';
 
 import { isCloudBillingEnabled } from '../env';
+import { getOrganizationBilling } from '../queries/billing.queries';
 import {
 	createCloudPaymentMethodPortalForAdmin,
 	createCloudPortalForAdmin,
@@ -75,20 +76,23 @@ const cloudBillingAdminProcedure = cloudBillingMemberProcedure.use(async ({ ctx,
 const requestInput = z.object({ requestId: z.uuid() });
 
 export const billingRoutes = {
-	getAccess: cloudBillingAccessProcedure.query(({ ctx }) => ({
-		organizationId: ctx.organization.id,
-		hasAccess: hasCloudBillingAccess(true, ctx.organization),
-		status: ctx.organization.billingStatus,
-		trialEndsAt: ctx.organization.trialEndsAt,
-		canManageBilling: ctx.orgRole === 'admin',
-		trialAvailable:
-			ctx.organization.billingStatus === null &&
-			ctx.organization.trialStartedAt === null &&
-			ctx.organization.trialEndsAt === null &&
-			ctx.organization.stripeSubscriptionId === null,
-		requiresBillingAction:
-			ctx.organization.billingStatus === 'trialing' && ctx.organization.hasDefaultPaymentMethod !== true,
-	})),
+	getAccess: cloudBillingAccessProcedure.query(async ({ ctx }) => {
+		const billing = await getOrganizationBilling(ctx.organization.id);
+		return {
+			organizationId: ctx.organization.id,
+			hasAccess: hasCloudBillingAccess(true, billing),
+			status: billing?.billingStatus ?? null,
+			trialEndsAt: billing?.trialEndsAt ?? null,
+			canManageBilling: ctx.orgRole === 'admin',
+			trialAvailable:
+				!billing ||
+				(billing.billingStatus === null &&
+					billing.trialStartedAt === null &&
+					billing.trialEndsAt === null &&
+					billing.stripeSubscriptionId === null),
+			requiresBillingAction: billing?.billingStatus === 'trialing' && billing.hasDefaultPaymentMethod !== true,
+		};
+	}),
 
 	getStatus: cloudBillingAdminProcedure.query(async ({ ctx }) => {
 		const organization = await getCloudBillingOrganizationForAdmin({

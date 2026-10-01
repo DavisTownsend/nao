@@ -193,6 +193,19 @@ export const organization = sqliteTable('organization', {
 	googleClientSecret: text('google_client_secret'),
 	googleAuthDomains: text('google_auth_domains'), // comma-separated list
 
+	createdAt: integer('created_at', { mode: 'timestamp_ms' })
+		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+		.notNull(),
+	updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+		.$onUpdate(() => new Date())
+		.notNull(),
+});
+
+export const organizationBilling = sqliteTable('organization_billing', {
+	orgId: text('org_id')
+		.primaryKey()
+		.references(() => organization.id),
 	billingPlan: text('billing_plan'),
 	billingStatus: text('billing_status', { enum: BILLING_STATUSES }),
 	trialStartedAt: integer('trial_started_at', { mode: 'timestamp_ms' }),
@@ -206,14 +219,6 @@ export const organization = sqliteTable('organization', {
 	billingAccessEndsAt: integer('billing_access_ends_at', { mode: 'timestamp_ms' }),
 	billingUpdatedAt: integer('billing_updated_at', { mode: 'timestamp_ms' }),
 	billingSyncToken: text('billing_sync_token'),
-
-	createdAt: integer('created_at', { mode: 'timestamp_ms' })
-		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-		.notNull(),
-	updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-		.$onUpdate(() => new Date())
-		.notNull(),
 });
 
 export const stripeWebhookEvent = sqliteTable('stripe_webhook_event', {

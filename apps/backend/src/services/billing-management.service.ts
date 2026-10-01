@@ -1,4 +1,4 @@
-import type { DBOrganization } from '../db/abstractSchema';
+import type { DBOrganization, DBOrganizationBilling } from '../db/abstractSchema';
 import * as billingQueries from '../queries/billing.queries';
 import * as organizationQueries from '../queries/organization.queries';
 import * as userQueries from '../queries/user.queries';
@@ -24,6 +24,8 @@ interface AdminBillingRequestInput extends AdminBillingInput {
 	requestId: string;
 }
 
+type CloudBillingOrganization = DBOrganization & Omit<DBOrganizationBilling, 'orgId'>;
+
 export class CloudBillingManagementInputError extends HandlerError {
 	constructor(message: string) {
 		super('BAD_REQUEST', message);
@@ -31,7 +33,7 @@ export class CloudBillingManagementInputError extends HandlerError {
 	}
 }
 
-export async function getCloudBillingOrganizationForAdmin(input: AdminBillingInput): Promise<DBOrganization> {
+export async function getCloudBillingOrganizationForAdmin(input: AdminBillingInput): Promise<CloudBillingOrganization> {
 	return requireAdminOrganization(input);
 }
 
@@ -121,7 +123,7 @@ export async function resumeCloudSubscriptionForAdmin(input: AdminBillingRequest
 	});
 }
 
-async function requireAdminOrganization(input: AdminBillingInput): Promise<DBOrganization> {
+async function requireAdminOrganization(input: AdminBillingInput): Promise<CloudBillingOrganization> {
 	const membership = await organizationQueries.getOrgMember(input.organizationId, input.userId);
 	if (membership?.role !== 'admin') {
 		throw new HandlerError('FORBIDDEN', 'Only organization admins can manage billing');
@@ -131,10 +133,26 @@ async function requireAdminOrganization(input: AdminBillingInput): Promise<DBOrg
 	if (!organization) {
 		throw new HandlerError('NOT_FOUND', 'Organization was not found');
 	}
-	return organization;
+	const billing = await billingQueries.getOrganizationBilling(input.organizationId);
+	return {
+		...organization,
+		billingPlan: billing?.billingPlan ?? null,
+		billingStatus: billing?.billingStatus ?? null,
+		trialStartedAt: billing?.trialStartedAt ?? null,
+		trialEndsAt: billing?.trialEndsAt ?? null,
+		stripeCustomerId: billing?.stripeCustomerId ?? null,
+		stripeSubscriptionId: billing?.stripeSubscriptionId ?? null,
+		stripePriceId: billing?.stripePriceId ?? null,
+		currentPeriodEndsAt: billing?.currentPeriodEndsAt ?? null,
+		cancellationScheduled: billing?.cancellationScheduled ?? null,
+		hasDefaultPaymentMethod: billing?.hasDefaultPaymentMethod ?? null,
+		billingAccessEndsAt: billing?.billingAccessEndsAt ?? null,
+		billingUpdatedAt: billing?.billingUpdatedAt ?? null,
+		billingSyncToken: billing?.billingSyncToken ?? null,
+	};
 }
 
-async function ensureCloudCustomer(organization: DBOrganization, userId: string): Promise<string> {
+async function ensureCloudCustomer(organization: CloudBillingOrganization, userId: string): Promise<string> {
 	if (organization.stripeCustomerId) {
 		return organization.stripeCustomerId;
 	}

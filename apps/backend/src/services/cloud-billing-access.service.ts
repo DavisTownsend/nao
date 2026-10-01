@@ -60,9 +60,9 @@ export async function hasOrganizationCloudBillingAccess(organizationId: string, 
 	if (!isCloudBillingEnabled()) {
 		return true;
 	}
-	const { getOrganizationById } = await import('../queries/organization.queries');
-	const organization = await getOrganizationById(organizationId);
-	return hasCloudBillingAccess(true, organization, now);
+	const { getOrganizationBilling } = await import('../queries/billing.queries');
+	const billing = await getOrganizationBilling(organizationId);
+	return hasCloudBillingAccess(true, billing, now);
 }
 
 export async function hasProjectCloudBillingAccess(projectId: string, now = new Date()): Promise<boolean> {

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const testState = vi.hoisted(() => ({
+	billing: null as Record<string, unknown> | null,
 	billingEnabled: true,
 	membership: null as Record<string, unknown> | null,
 }));
@@ -36,6 +37,7 @@ vi.mock('../src/queries/user.queries', () => ({
 
 vi.mock('../src/queries/billing.queries', () => ({
 	attachStripeCustomer: stripeMocks.attachCustomer,
+	getOrganizationBilling: vi.fn(async () => testState.billing),
 }));
 
 vi.mock('../src/services/billing-reconciliation.service', () => ({
@@ -78,6 +80,7 @@ const testRouter = router({ billing: billingRoutes });
 
 describe('billing.getAccess', () => {
 	beforeEach(() => {
+		testState.billing = null;
 		testState.billingEnabled = true;
 		testState.membership = null;
 		vi.clearAllMocks();
@@ -126,6 +129,7 @@ describe('billing.getAccess', () => {
 
 describe('billing.getStatus', () => {
 	beforeEach(() => {
+		testState.billing = null;
 		testState.billingEnabled = true;
 		testState.membership = null;
 		vi.clearAllMocks();
@@ -258,7 +262,7 @@ describe('billing.createTrialCheckoutSession', () => {
 		vi.clearAllMocks();
 		stripeMocks.createCustomer.mockResolvedValue({ id: 'cus_cloud' });
 		stripeMocks.attachCustomer.mockResolvedValue({
-			...(testState.membership as { organization: Record<string, unknown> }).organization,
+			orgId: 'org-id',
 			stripeCustomerId: 'cus_cloud',
 		});
 		stripeMocks.createCheckout.mockResolvedValue('https://checkout.stripe.com/trial');
@@ -385,6 +389,26 @@ function anonymousCaller() {
 }
 
 function membership(organization: Record<string, unknown>, role = 'admin') {
+	testState.billing =
+		Object.keys(organization).length === 0
+			? null
+			: {
+					orgId: 'org-id',
+					billingPlan: null,
+					billingStatus: null,
+					trialStartedAt: null,
+					trialEndsAt: null,
+					stripeCustomerId: null,
+					stripeSubscriptionId: null,
+					stripePriceId: null,
+					currentPeriodEndsAt: null,
+					cancellationScheduled: null,
+					hasDefaultPaymentMethod: null,
+					billingAccessEndsAt: null,
+					billingUpdatedAt: null,
+					billingSyncToken: null,
+					...organization,
+				};
 	return {
 		orgId: 'org-id',
 		userId: 'user-id',
@@ -393,19 +417,6 @@ function membership(organization: Record<string, unknown>, role = 'admin') {
 		organization: {
 			id: 'org-id',
 			name: 'Test Organization',
-			billingPlan: null,
-			billingStatus: null,
-			trialStartedAt: null,
-			trialEndsAt: null,
-			stripeCustomerId: null,
-			stripeSubscriptionId: null,
-			stripePriceId: null,
-			currentPeriodEndsAt: null,
-			cancellationScheduled: null,
-			hasDefaultPaymentMethod: null,
-			billingAccessEndsAt: null,
-			billingUpdatedAt: null,
-			...organization,
 		},
 	};
 }

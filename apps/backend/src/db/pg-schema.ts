@@ -182,6 +182,17 @@ export const organization = pgTable('organization', {
 	googleClientSecret: text('google_client_secret'),
 	googleAuthDomains: text('google_auth_domains'), // comma-separated list
 
+	createdAt: timestamp('created_at').defaultNow().notNull(),
+	updatedAt: timestamp('updated_at')
+		.defaultNow()
+		.$onUpdate(() => new Date())
+		.notNull(),
+});
+
+export const organizationBilling = pgTable('organization_billing', {
+	orgId: text('org_id')
+		.primaryKey()
+		.references(() => organization.id),
 	billingPlan: text('billing_plan'),
 	billingStatus: text('billing_status', { enum: BILLING_STATUSES }),
 	trialStartedAt: timestamp('trial_started_at'),
@@ -195,12 +206,6 @@ export const organization = pgTable('organization', {
 	billingAccessEndsAt: timestamp('billing_access_ends_at'),
 	billingUpdatedAt: timestamp('billing_updated_at'),
 	billingSyncToken: text('billing_sync_token'),
-
-	createdAt: timestamp('created_at').defaultNow().notNull(),
-	updatedAt: timestamp('updated_at')
-		.defaultNow()
-		.$onUpdate(() => new Date())
-		.notNull(),
 });
 
 export const stripeWebhookEvent = pgTable('stripe_webhook_event', {

@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../src/queries/billing.queries', () => ({
-	listOrganizationsWithStripeCustomers: mocks.listMappedOrganizations,
+	listOrganizationBillingsWithStripeCustomers: mocks.listMappedOrganizations,
 }));
 
 vi.mock('../src/services/billing-reconciliation.service', () => ({
@@ -27,8 +27,8 @@ describe('cloud billing lifecycle', () => {
 
 	it('reconciles every mapped organization without aborting after one failure', async () => {
 		mocks.listMappedOrganizations.mockResolvedValue([
-			{ id: 'org-one', stripeCustomerId: 'cus_one' },
-			{ id: 'org-two', stripeCustomerId: 'cus_two' },
+			{ orgId: 'org-one', stripeCustomerId: 'cus_one' },
+			{ orgId: 'org-two', stripeCustomerId: 'cus_two' },
 		]);
 		mocks.reconcileCustomer.mockRejectedValueOnce(new Error('temporary')).mockResolvedValueOnce({
 			applied: true,
@@ -45,7 +45,7 @@ describe('cloud billing lifecycle', () => {
 		let maxActive = 0;
 		mocks.listMappedOrganizations.mockResolvedValue(
 			Array.from({ length: 12 }, (_, index) => ({
-				id: `org-${index}`,
+				orgId: `org-${index}`,
 				stripeCustomerId: `cus_${index}`,
 			})),
 		);

@@ -17,19 +17,19 @@ export async function reconcileCloudBillingCustomer(input: {
 	stripeCustomerId: string;
 	organizationIdHint?: string;
 }): Promise<CloudBillingReconciliationResult> {
-	const organization = await resolveOrganization(input.stripeCustomerId, input.organizationIdHint);
-	if (!organization) {
+	const billing = await resolveOrganizationBilling(input.stripeCustomerId, input.organizationIdHint);
+	if (!billing) {
 		return { applied: false, ignored: true };
 	}
-	const claim = await billingQueries.claimBillingSync(organization.id, input.stripeCustomerId);
+	const claim = await billingQueries.claimBillingSync(billing.orgId, input.stripeCustomerId);
 	const subscriptions = await listCloudSubscriptions(input.stripeCustomerId);
-	const subscription = selectCloudSubscription(subscriptions, claim.organization.stripeSubscriptionId);
+	const subscription = selectCloudSubscription(subscriptions, claim.billing.stripeSubscriptionId);
 	logDuplicateCurrentSubscriptions(input.stripeCustomerId, subscriptions, subscription);
 
 	if (!subscription) {
 		return {
 			applied: await billingQueries.updatePaymentMethodProjection(
-				organization.id,
+				billing.orgId,
 				claim.token,
 				input.stripeCustomerId,
 				await hasCloudDefaultPaymentMethod(input.stripeCustomerId),
@@ -38,20 +38,20 @@ export async function reconcileCloudBillingCustomer(input: {
 		};
 	}
 
-	assertSubscriptionOwnership(subscription, input.stripeCustomerId, organization.id);
+	assertSubscriptionOwnership(subscription, input.stripeCustomerId, billing.orgId);
 	const projection = await cloudSubscriptionProjection(subscription);
 	return {
-		applied: await billingQueries.updateSubscriptionProjection(organization.id, claim.token, {
+		applied: await billingQueries.updateSubscriptionProjection(billing.orgId, claim.token, {
 			...projection,
-			trialStartedAt: projection.trialStartedAt ?? claim.organization.trialStartedAt,
-			trialEndsAt: projection.trialEndsAt ?? claim.organization.trialEndsAt,
+			trialStartedAt: projection.trialStartedAt ?? claim.billing.trialStartedAt,
+			trialEndsAt: projection.trialEndsAt ?? claim.billing.trialEndsAt,
 		}),
 		ignored: false,
 	};
 }
 
-async function resolveOrganization(stripeCustomerId: string, organizationIdHint?: string) {
-	const attached = await billingQueries.getOrganizationByStripeCustomerId(stripeCustomerId);
+async function resolveOrganizationBilling(stripeCustomerId: string, organizationIdHint?: string) {
+	const attached = await billingQueries.getOrganizationBillingByStripeCustomerId(stripeCustomerId);
 	if (attached) {
 		return attached;
 	}

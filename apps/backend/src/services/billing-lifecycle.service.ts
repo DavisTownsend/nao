@@ -9,25 +9,25 @@ export async function runCloudBillingLifecycle(): Promise<void> {
 }
 
 async function reconcileMappedOrganizations(): Promise<void> {
-	const organizations = await billingQueries.listOrganizationsWithStripeCustomers();
-	for (let index = 0; index < organizations.length; index += RECONCILIATION_CONCURRENCY) {
-		await Promise.all(organizations.slice(index, index + RECONCILIATION_CONCURRENCY).map(reconcileOrganization));
+	const billings = await billingQueries.listOrganizationBillingsWithStripeCustomers();
+	for (let index = 0; index < billings.length; index += RECONCILIATION_CONCURRENCY) {
+		await Promise.all(billings.slice(index, index + RECONCILIATION_CONCURRENCY).map(reconcileOrganization));
 	}
 }
 
 async function reconcileOrganization(
-	organization: Awaited<ReturnType<typeof billingQueries.listOrganizationsWithStripeCustomers>>[number],
+	billing: Awaited<ReturnType<typeof billingQueries.listOrganizationBillingsWithStripeCustomers>>[number],
 ): Promise<void> {
-	if (!organization.stripeCustomerId) {
+	if (!billing.stripeCustomerId) {
 		return;
 	}
 	try {
 		await reconcileCloudBillingCustomer({
-			stripeCustomerId: organization.stripeCustomerId,
-			organizationIdHint: organization.id,
+			stripeCustomerId: billing.stripeCustomerId,
+			organizationIdHint: billing.orgId,
 		});
 	} catch (error) {
-		logger.error(`Cloud billing reconciliation failed for organization ${organization.id}`, {
+		logger.error(`Cloud billing reconciliation failed for organization ${billing.orgId}`, {
 			source: 'system',
 			context: serializeError(error),
 		});

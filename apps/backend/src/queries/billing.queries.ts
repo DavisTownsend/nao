@@ -1,6 +1,6 @@
-import { and, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 
-import s, { DBOrganization, DBStripeWebhookEvent, NewStripeWebhookEvent } from '../db/abstractSchema';
+import s, { DBOrganizationBilling, DBStripeWebhookEvent, NewStripeWebhookEvent } from '../db/abstractSchema';
 import { db } from '../db/db';
 import { BillingStatus } from '../types/billing';
 
@@ -19,52 +19,65 @@ export interface SubscriptionProjection {
 }
 
 interface BillingSyncClaim {
-	organization: DBOrganization;
+	billing: DBOrganizationBilling;
 	token: string;
 }
 
-export async function attachStripeCustomer(orgId: string, stripeCustomerId: string): Promise<DBOrganization> {
+export async function getOrganizationBilling(orgId: string): Promise<DBOrganizationBilling | null> {
+	const [billing] = await db
+		.select()
+		.from(s.organizationBilling)
+		.where(eq(s.organizationBilling.orgId, orgId))
+		.execute();
+	return billing ?? null;
+}
+
+export async function attachStripeCustomer(orgId: string, stripeCustomerId: string): Promise<DBOrganizationBilling> {
 	await db
-		.update(s.organization)
-		.set({ stripeCustomerId, billingUpdatedAt: new Date() })
-		.where(and(eq(s.organization.id, orgId), isNull(s.organization.stripeCustomerId)))
+		.insert(s.organizationBilling)
+		.values({ orgId, stripeCustomerId, billingUpdatedAt: new Date() })
+		.onConflictDoNothing()
 		.execute();
 
-	const [organization] = await db.select().from(s.organization).where(eq(s.organization.id, orgId)).execute();
-	if (!organization) {
-		throw new Error(`Organization "${orgId}" was not found`);
+	const billing = await getOrganizationBilling(orgId);
+	if (!billing) {
+		throw new Error(`Unable to attach Stripe Customer "${stripeCustomerId}" to organization "${orgId}"`);
 	}
-	if (organization.stripeCustomerId !== stripeCustomerId) {
+	if (billing.stripeCustomerId !== stripeCustomerId) {
 		throw new Error(`Organization "${orgId}" is already attached to another Stripe Customer`);
 	}
-	return organization;
+	return billing;
 }
 
 export async function claimBillingSync(orgId: string, stripeCustomerId: string): Promise<BillingSyncClaim> {
 	const token = crypto.randomUUID();
-	const [organization] = await db
-		.update(s.organization)
+	const [billing] = await db
+		.update(s.organizationBilling)
 		.set({ billingSyncToken: token })
-		.where(and(eq(s.organization.id, orgId), eq(s.organization.stripeCustomerId, stripeCustomerId)))
+		.where(
+			and(eq(s.organizationBilling.orgId, orgId), eq(s.organizationBilling.stripeCustomerId, stripeCustomerId)),
+		)
 		.returning()
 		.execute();
-	if (!organization) {
+	if (!billing) {
 		throw new Error(`Organization "${orgId}" is not attached to Stripe Customer "${stripeCustomerId}"`);
 	}
-	return { organization, token };
+	return { billing, token };
 }
 
-export async function getOrganizationByStripeCustomerId(stripeCustomerId: string): Promise<DBOrganization | null> {
-	const [organization] = await db
+export async function getOrganizationBillingByStripeCustomerId(
+	stripeCustomerId: string,
+): Promise<DBOrganizationBilling | null> {
+	const [billing] = await db
 		.select()
-		.from(s.organization)
-		.where(eq(s.organization.stripeCustomerId, stripeCustomerId))
+		.from(s.organizationBilling)
+		.where(eq(s.organizationBilling.stripeCustomerId, stripeCustomerId))
 		.execute();
-	return organization ?? null;
+	return billing ?? null;
 }
 
-export async function listOrganizationsWithStripeCustomers(): Promise<DBOrganization[]> {
-	return db.select().from(s.organization).where(isNotNull(s.organization.stripeCustomerId)).execute();
+export async function listOrganizationBillingsWithStripeCustomers(): Promise<DBOrganizationBilling[]> {
+	return db.select().from(s.organizationBilling).where(isNotNull(s.organizationBilling.stripeCustomerId)).execute();
 }
 
 export async function updateSubscriptionProjection(
@@ -73,16 +86,16 @@ export async function updateSubscriptionProjection(
 	projection: SubscriptionProjection,
 ): Promise<boolean> {
 	const [updated] = await db
-		.update(s.organization)
+		.update(s.organizationBilling)
 		.set({ ...projection, billingUpdatedAt: new Date(), billingSyncToken: null })
 		.where(
 			and(
-				eq(s.organization.id, orgId),
-				eq(s.organization.billingSyncToken, syncToken),
-				eq(s.organization.stripeCustomerId, projection.stripeCustomerId),
+				eq(s.organizationBilling.orgId, orgId),
+				eq(s.organizationBilling.billingSyncToken, syncToken),
+				eq(s.organizationBilling.stripeCustomerId, projection.stripeCustomerId),
 			),
 		)
-		.returning({ id: s.organization.id })
+		.returning({ orgId: s.organizationBilling.orgId })
 		.execute();
 	return Boolean(updated);
 }
@@ -94,16 +107,16 @@ export async function updatePaymentMethodProjection(
 	hasDefaultPaymentMethod: boolean,
 ): Promise<boolean> {
 	const [updated] = await db
-		.update(s.organization)
+		.update(s.organizationBilling)
 		.set({ hasDefaultPaymentMethod, billingUpdatedAt: new Date(), billingSyncToken: null })
 		.where(
 			and(
-				eq(s.organization.id, orgId),
-				eq(s.organization.billingSyncToken, syncToken),
-				eq(s.organization.stripeCustomerId, stripeCustomerId),
+				eq(s.organizationBilling.orgId, orgId),
+				eq(s.organizationBilling.billingSyncToken, syncToken),
+				eq(s.organizationBilling.stripeCustomerId, stripeCustomerId),
 			),
 		)
-		.returning({ id: s.organization.id })
+		.returning({ orgId: s.organizationBilling.orgId })
 		.execute();
 	return Boolean(updated);
 }

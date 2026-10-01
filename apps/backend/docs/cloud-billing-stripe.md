@@ -35,7 +35,7 @@ flowchart LR
     Organization --> Access["Access enforcement"]
 ```
 
-Stripe is the source of truth. Webhooks trigger reconciliation from canonical Stripe state; the application does not apply webhook payloads directly. The local organization projection supports access checks and UI queries. Interactive management requires an organization admin, checked at both the route and service boundaries.
+Stripe is the source of truth. Webhooks trigger reconciliation from canonical Stripe state; the application does not apply webhook payloads directly. The optional local `organization_billing` projection supports access checks and UI queries; self-hosted organizations have no row. Interactive management requires an organization admin, checked at both the route and service boundaries.
 
 ```mermaid
 sequenceDiagram

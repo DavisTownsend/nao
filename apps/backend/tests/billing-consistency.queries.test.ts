@@ -23,7 +23,9 @@ vi.mock('../src/db/db', async () => {
 import s from '../src/db/abstractSchema';
 import { db } from '../src/db/db';
 import {
+	attachStripeCustomer,
 	claimBillingSync,
+	getOrganizationBilling,
 	type SubscriptionProjection,
 	updateSubscriptionProjection,
 } from '../src/queries/billing.queries';
@@ -35,6 +37,9 @@ describe('billing consistency queries', () => {
 			id: 'billing-sync-org',
 			name: 'Billing Sync',
 			slug: 'billing-sync',
+		});
+		await db.insert(s.organizationBilling).values({
+			orgId: 'billing-sync-org',
 			stripeCustomerId: 'cus_sync',
 			stripeSubscriptionId: 'sub_old',
 			billingStatus: 'canceled',
@@ -43,6 +48,20 @@ describe('billing consistency queries', () => {
 
 	afterAll(() => {
 		db.$client.close();
+	});
+
+	it('creates the billing projection only when Stripe is attached', async () => {
+		await db.insert(s.organization).values({
+			id: 'uninitialized-billing-org',
+			name: 'Uninitialized Billing',
+			slug: 'uninitialized-billing',
+		});
+
+		await expect(getOrganizationBilling('uninitialized-billing-org')).resolves.toBeNull();
+		await expect(attachStripeCustomer('uninitialized-billing-org', 'cus_new')).resolves.toMatchObject({
+			orgId: 'uninitialized-billing-org',
+			stripeCustomerId: 'cus_new',
+		});
 	});
 
 	it('rejects a superseded projection', async () => {
@@ -56,8 +75,11 @@ describe('billing consistency queries', () => {
 			true,
 		);
 
-		const [organization] = await db.select().from(s.organization).where(eq(s.organization.id, 'billing-sync-org'));
-		expect(organization).toMatchObject({
+		const [billing] = await db
+			.select()
+			.from(s.organizationBilling)
+			.where(eq(s.organizationBilling.orgId, 'billing-sync-org'));
+		expect(billing).toMatchObject({
 			billingStatus: 'active',
 			stripeSubscriptionId: 'sub_active',
 		});

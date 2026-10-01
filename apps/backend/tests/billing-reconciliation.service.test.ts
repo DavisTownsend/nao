@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
 	attachCustomer: vi.fn(),
 	claimSync: vi.fn(),
-	getOrganizationByCustomer: vi.fn(),
+	getBillingByCustomer: vi.fn(),
 	getOrganizationById: vi.fn(),
 	hasDefaultPaymentMethod: vi.fn(),
 	listSubscriptions: vi.fn(),
@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../src/queries/billing.queries', () => ({
 	attachStripeCustomer: mocks.attachCustomer,
 	claimBillingSync: mocks.claimSync,
-	getOrganizationByStripeCustomerId: mocks.getOrganizationByCustomer,
+	getOrganizationBillingByStripeCustomerId: mocks.getBillingByCustomer,
 	updatePaymentMethodProjection: mocks.updatePaymentMethod,
 	updateSubscriptionProjection: mocks.updateSubscription,
 }));
@@ -40,9 +40,9 @@ import { reconcileCloudBillingCustomer } from '../src/services/billing-reconcili
 describe('cloud billing reconciliation', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		const organization = buildOrganization();
-		mocks.getOrganizationByCustomer.mockResolvedValue(organization);
-		mocks.claimSync.mockResolvedValue({ organization, token: 'sync-token' });
+		const billing = buildBilling();
+		mocks.getBillingByCustomer.mockResolvedValue(billing);
+		mocks.claimSync.mockResolvedValue({ billing, token: 'sync-token' });
 		mocks.hasDefaultPaymentMethod.mockResolvedValue(false);
 		mocks.subscriptionProjection.mockResolvedValue({
 			billingStatus: 'active',
@@ -115,9 +115,9 @@ describe('cloud billing reconciliation', () => {
 	});
 
 	it('prefers the persisted subscription and logs when Stripe has multiple current subscriptions', async () => {
-		const organization = buildOrganization({ stripeSubscriptionId: 'sub_old' });
-		mocks.getOrganizationByCustomer.mockResolvedValue(organization);
-		mocks.claimSync.mockResolvedValue({ organization, token: 'sync-token' });
+		const billing = buildBilling({ stripeSubscriptionId: 'sub_old' });
+		mocks.getBillingByCustomer.mockResolvedValue(billing);
+		mocks.claimSync.mockResolvedValue({ billing, token: 'sync-token' });
 		mocks.listSubscriptions.mockResolvedValue([
 			buildSubscription({ id: 'sub_new', status: 'active', created: 10 }),
 			buildSubscription({ id: 'sub_old', status: 'active', created: 20 }),
@@ -143,10 +143,9 @@ describe('cloud billing reconciliation', () => {
 	});
 
 	it('uses live subscription metadata when attaching an unmapped Customer', async () => {
-		const organization = buildOrganization({ stripeCustomerId: null });
-		mocks.getOrganizationByCustomer.mockResolvedValue(null);
-		mocks.getOrganizationById.mockResolvedValue(organization);
-		mocks.attachCustomer.mockResolvedValue(buildOrganization());
+		mocks.getBillingByCustomer.mockResolvedValue(null);
+		mocks.getOrganizationById.mockResolvedValue({ id: 'org-id' });
+		mocks.attachCustomer.mockResolvedValue(buildBilling());
 		mocks.listSubscriptions.mockResolvedValue([
 			buildSubscription({ metadata: { nao_org_id: 'org-id' }, status: 'active' }),
 		]);
@@ -161,10 +160,9 @@ describe('cloud billing reconciliation', () => {
 	});
 
 	it('uses the organization hint when an unmapped Customer has no subscriptions', async () => {
-		const organization = buildOrganization({ stripeCustomerId: null });
-		mocks.getOrganizationByCustomer.mockResolvedValue(null);
-		mocks.getOrganizationById.mockResolvedValue(organization);
-		mocks.attachCustomer.mockResolvedValue(buildOrganization());
+		mocks.getBillingByCustomer.mockResolvedValue(null);
+		mocks.getOrganizationById.mockResolvedValue({ id: 'org-id' });
+		mocks.attachCustomer.mockResolvedValue(buildBilling());
 		mocks.listSubscriptions.mockResolvedValue([]);
 
 		await reconcileCloudBillingCustomer({
@@ -189,7 +187,7 @@ describe('cloud billing reconciliation', () => {
 	});
 
 	it('ignores an unrelated Stripe Customer without an organization or cloud subscription', async () => {
-		mocks.getOrganizationByCustomer.mockResolvedValue(null);
+		mocks.getBillingByCustomer.mockResolvedValue(null);
 		mocks.listSubscriptions.mockResolvedValue([]);
 
 		await expect(reconcileCloudBillingCustomer({ stripeCustomerId: 'cus_unrelated' })).resolves.toEqual({
@@ -210,9 +208,9 @@ describe('cloud billing reconciliation', () => {
 	});
 });
 
-function buildOrganization(overrides: Record<string, unknown> = {}) {
+function buildBilling(overrides: Record<string, unknown> = {}) {
 	return {
-		id: 'org-id',
+		orgId: 'org-id',
 		stripeCustomerId: 'cus_cloud',
 		stripeSubscriptionId: 'sub_old',
 		trialStartedAt: new Date('2026-01-01T00:00:00.000Z'),
