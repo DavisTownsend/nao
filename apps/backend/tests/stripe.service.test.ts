@@ -410,12 +410,18 @@ describe('cloud Checkout', () => {
 				status: 'canceled',
 			}),
 		);
-		stripeMocks.listSubscriptions.mockReturnValue(
-			subscriptionList([
-				...historicalSubscriptions,
-				cloudSubscription({ created: 101, id: 'sub_current', status: 'active' }),
-			]),
-		);
+		const currentSubscription = cloudSubscription({ created: 101, id: 'sub_current', status: 'active' });
+		stripeMocks.listSubscriptions.mockImplementation((params: Stripe.SubscriptionListParams) => {
+			if (params.starting_after) {
+				return subscriptionList([currentSubscription]);
+			}
+			return subscriptionList(historicalSubscriptions, () =>
+				stripeMocks.listSubscriptions({
+					...params,
+					starting_after: historicalSubscriptions.at(-1)?.id,
+				}),
+			);
+		});
 
 		await expect(
 			createCloudResubscribeSession({
@@ -425,6 +431,12 @@ describe('cloud Checkout', () => {
 			}),
 		).rejects.toThrow('already has a current subscription');
 		expect(stripeMocks.createCheckoutSession).not.toHaveBeenCalled();
+		expect(stripeMocks.listSubscriptions).toHaveBeenNthCalledWith(2, {
+			customer: 'cus_cloud',
+			limit: 100,
+			starting_after: 'sub_historical_99',
+			status: 'all',
+		});
 	});
 
 	it('creates one idempotent organization Customer', async () => {
@@ -664,10 +676,17 @@ function cloudSubscription(overrides: Partial<Stripe.Subscription> = {}): Stripe
 	} as Stripe.Subscription;
 }
 
-function subscriptionList(subscriptions: Stripe.Subscription[]): AsyncIterable<Stripe.Subscription> {
+function subscriptionList(
+	subscriptions: Stripe.Subscription[],
+	nextPage?: () => AsyncIterable<Stripe.Subscription>,
+): AsyncIterable<Stripe.Subscription> & { data: Stripe.Subscription[] } {
 	return {
+		data: subscriptions,
 		async *[Symbol.asyncIterator]() {
 			yield* subscriptions;
+			if (nextPage) {
+				yield* nextPage();
+			}
 		},
 	};
 }
