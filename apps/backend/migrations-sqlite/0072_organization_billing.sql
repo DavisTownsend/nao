@@ -18,7 +18,7 @@ CREATE TABLE `organization_billing` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `organization_billing_stripe_customer_id_unique` ON `organization_billing` (`stripe_customer_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `organization_billing_stripe_subscription_id_unique` ON `organization_billing` (`stripe_subscription_id`);--> statement-breakpoint
-CREATE TABLE `stripe_webhook_event` (
+CREATE TABLE IF NOT EXISTS `stripe_webhook_event` (
 	`id` text PRIMARY KEY NOT NULL,
 	`type` text NOT NULL,
 	`stripe_object_id` text,

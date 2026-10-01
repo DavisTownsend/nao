@@ -17,7 +17,7 @@ CREATE TABLE "organization_billing" (
 	CONSTRAINT "organization_billing_stripe_subscription_id_unique" UNIQUE("stripe_subscription_id")
 );
 --> statement-breakpoint
-CREATE TABLE "stripe_webhook_event" (
+CREATE TABLE IF NOT EXISTS "stripe_webhook_event" (
 	"id" text PRIMARY KEY NOT NULL,
 	"type" text NOT NULL,
 	"stripe_object_id" text,
