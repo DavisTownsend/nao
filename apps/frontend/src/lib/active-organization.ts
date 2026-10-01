@@ -1,5 +1,6 @@
 import { TRPCClientError } from '@trpc/client';
 
+import { setActiveProjectId } from './active-project';
 import { createLocalStorage } from './local-storage';
 
 const activeOrganizationStorage = createLocalStorage<string>('nao.active-organization-id');
@@ -26,5 +27,6 @@ export function clearStaleActiveOrganization(error: unknown): boolean {
 	}
 
 	setActiveOrganizationId(null);
+	setActiveProjectId(null);
 	return true;
 }

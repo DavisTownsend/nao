@@ -146,7 +146,7 @@ Stripe does not send trial-ending reminder emails in sandbox mode. Verify the sa
 
 Stripe sends these messages to the Stripe Customer email. nao sets that address from the organization admin who first creates the billing Customer. Change the Customer email in Stripe if billing notifications should go to a shared finance inbox.
 
-Configure Smart Retries deliberately and set the final action to cancel the subscription or mark it unpaid. A `past_due` subscription keeps access while Stripe retries payment, and nao restricts access once Stripe marks it `unpaid` or `canceled`. This final action is mandatory: Stripe keeps advancing the billing period of a subscription left `past_due`, so that setting would keep access indefinitely without payment.
+Configure Smart Retries deliberately and set the final action to cancel the subscription or mark it unpaid. A non-canceling `past_due` subscription keeps access only until its projected period end plus the 24-hour reconciliation grace while Stripe retries payment. A scheduled cancellation gets no grace and loses access at its projected billing access end. nao also restricts access as soon as Stripe marks the subscription `unpaid` or `canceled`. The final action is mandatory because lifecycle reconciliation can keep projecting later billing periods for a subscription left `past_due`, extending access without payment.
 
 ### Trial abuse
 
@@ -293,17 +293,29 @@ Complete the sandbox setup and test-clock scenarios first. Then switch the Strip
 Every organization created before billing is enabled has no billing state. Enabling billing restricts all of them immediately, including members who cannot manage billing. Give each existing customer a subscription so it keeps access:
 
 1. Before enabling billing, create a live Coupon for the agreed terms, for example 100% off forever for a comped customer, restricted to the `nao Cloud` Product.
-2. For each organization, create a Stripe Customer with the customer's billing email, then a subscription on the current `nao Cloud` Price with the Coupon and subscription metadata `nao_org_id=<organization id>`. Do not create a second Customer for an organization.
-3. Schedule the switch in a low-traffic window. The webhook route does not exist while billing is disabled, so Stripe queues the `customer.subscription.created` events for retry.
-4. Immediately after enabling billing, resend each `customer.subscription.created` event from Stripe Workbench. Reconciliation links the Customer to the organization from `nao_org_id`, and the hourly lifecycle job keeps it in sync afterwards.
-5. Confirm each organization shows **Active** on **Plan & Billing** and that a member can run an agent.
+2. For each organization, create or reuse one Stripe Customer with the customer's billing email. Do not create a second Customer for an organization.
+3. For a fully comped customer, create a subscription on the current `nao Cloud` Price with the Coupon and subscription metadata `nao_org_id=<organization id>`.
+4. For any customer whose initial invoice has an amount due, create a Stripe-hosted Checkout Session in subscription mode for the existing Customer, current Price, and agreed Coupon. Require card collection and set subscription metadata `nao_org_id=<organization id>`, then have the customer complete Checkout and any required authentication. Do not create the subscription separately.
+5. Before enabling billing, confirm every migrated subscription is `active`, its initial invoice is `paid`, and every non-comped subscription has a saved default payment method. Do not rely on an `incomplete` subscription to preserve access.
+6. Schedule the switch in a low-traffic window. The webhook route does not exist while billing is disabled, so Stripe queues the `customer.subscription.created` events for retry.
+7. Immediately after enabling billing, resend each `customer.subscription.created` event from Stripe Workbench. Reconciliation links the Customer to the organization from `nao_org_id`, and the hourly lifecycle job keeps it in sync afterwards.
+8. Confirm each organization shows **Active** on **Plan & Billing** and that a member can run an agent.
 
 ```mermaid
 sequenceDiagram
     participant Operator
+    participant Customer
     participant Stripe
     participant nao
-    Operator->>Stripe: Create Customer and comped subscription with nao_org_id
+    Operator->>Stripe: Create or reuse Customer
+    alt Fully comped
+        Operator->>Stripe: Create zero-due subscription with nao_org_id
+    else Payment due
+        Operator->>Stripe: Create subscription Checkout with nao_org_id
+        Stripe->>Customer: Collect card and required authentication
+        Customer->>Stripe: Complete Checkout
+    end
+    Stripe-->>Operator: Active subscription and paid initial invoice
     Stripe--xnao: Webhook queued (route absent while disabled)
     Operator->>nao: Enable billing and redeploy
     Operator->>Stripe: Resend customer.subscription.created

@@ -44,6 +44,7 @@ export const queryClient = new QueryClient({
 		onError: (error, query) => {
 			if (matchQuery(trpc.organization.get.queryFilter(), query) && clearStaleActiveOrganization(error)) {
 				void queryClient.invalidateQueries();
+				void router.invalidate();
 			}
 		},
 	}),
