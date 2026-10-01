@@ -267,12 +267,17 @@ export async function hasCloudDefaultPaymentMethod(stripeCustomerIdValue: string
 
 export async function listCloudSubscriptions(stripeCustomerIdValue: string): Promise<Stripe.Subscription[]> {
 	const productId = configuredCloudProductId();
-	const subscriptions = await getStripeClient().subscriptions.list({
+	const subscriptions: Stripe.Subscription[] = [];
+	for await (const subscription of getStripeClient().subscriptions.list({
 		customer: stripeCustomerIdValue,
 		status: 'all',
 		limit: 100,
-	});
-	return subscriptions.data.filter((subscription) => hasProduct(subscription, productId));
+	})) {
+		if (hasProduct(subscription, productId)) {
+			subscriptions.push(subscription);
+		}
+	}
+	return subscriptions;
 }
 
 export async function getCloudSubscription(stripeSubscriptionId: string): Promise<Stripe.Subscription> {

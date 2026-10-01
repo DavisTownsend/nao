@@ -136,6 +136,7 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 		return null;
 	}
 	const isTrialAvailable = billing.data.trialAvailable;
+	const wasTrialUsed = Boolean(billing.data.trialStartedAt || billing.data.trialEndsAt);
 
 	return (
 		<SettingsCard title='Billing setup'>
@@ -159,7 +160,11 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 					<PlanDetail
 						label='Free trial'
 						value={
-							isTrialAvailable ? `${plan.trialDays} days, starting after Stripe Checkout` : 'Already used'
+							isTrialAvailable
+								? `${plan.trialDays} days, starting after Stripe Checkout`
+								: wasTrialUsed
+									? 'Already used'
+									: 'Unavailable'
 						}
 					/>
 					<PlanDetail label='Currency' value={plan.currency.toUpperCase()} />
@@ -179,6 +184,7 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 									? billingState.isTrialCheckoutPending
 									: billingState.isResubscribePending
 							}
+							disabled={billingState.isCheckoutPolling}
 						>
 							{isTrialAvailable
 								? `Start ${plan.trialDays}-day free trial in Stripe`

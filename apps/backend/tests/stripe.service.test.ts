@@ -80,7 +80,7 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	stripeMocks.listPrices.mockResolvedValue({ data: [cloudMonthlyPrice()] });
 	stripeMocks.listCheckoutSessions.mockResolvedValue({ data: [] });
-	stripeMocks.listSubscriptions.mockResolvedValue({ data: [] });
+	stripeMocks.listSubscriptions.mockReturnValue(subscriptionList([]));
 	stripeMocks.retrieveCustomer.mockResolvedValue({
 		deleted: false,
 		default_source: null,
@@ -292,7 +292,7 @@ describe('cloud Checkout', () => {
 	});
 
 	it('rejects initial Checkout when Stripe already has cloud subscription history', async () => {
-		stripeMocks.listSubscriptions.mockResolvedValue({ data: [cloudSubscription()] });
+		stripeMocks.listSubscriptions.mockReturnValue(subscriptionList([cloudSubscription()]));
 
 		await expect(
 			createCloudCheckoutSession({
@@ -311,7 +311,7 @@ describe('cloud Checkout', () => {
 			active: false,
 		});
 		stripeMocks.listPrices.mockRejectedValue(new Error('Current Price is unavailable'));
-		stripeMocks.listSubscriptions.mockResolvedValue({ data: [subscription] });
+		stripeMocks.listSubscriptions.mockReturnValue(subscriptionList([subscription]));
 
 		await expect(listCloudSubscriptions('cus_cloud')).resolves.toEqual([subscription]);
 		expect(stripeMocks.listPrices).not.toHaveBeenCalled();
@@ -320,15 +320,13 @@ describe('cloud Checkout', () => {
 	it('recognizes a cloud Product subscription whose quantity was changed in Stripe', async () => {
 		const subscription = cloudSubscription();
 		subscription.items.data[0].quantity = 2;
-		stripeMocks.listSubscriptions.mockResolvedValue({ data: [subscription] });
+		stripeMocks.listSubscriptions.mockReturnValue(subscriptionList([subscription]));
 
 		await expect(listCloudSubscriptions('cus_cloud')).resolves.toEqual([subscription]);
 	});
 
 	it('creates a paid Checkout Session after a canceled subscription without another trial', async () => {
-		stripeMocks.listSubscriptions.mockResolvedValue({
-			data: [cloudSubscription({ status: 'canceled' })],
-		});
+		stripeMocks.listSubscriptions.mockReturnValue(subscriptionList([cloudSubscription({ status: 'canceled' })]));
 		stripeMocks.createCheckoutSession.mockResolvedValue({
 			url: 'https://checkout.stripe.com/resubscribe',
 		});
@@ -393,12 +391,37 @@ describe('cloud Checkout', () => {
 	});
 
 	it('rejects a new Checkout Session while a current subscription exists', async () => {
-		stripeMocks.listSubscriptions.mockResolvedValue({ data: [cloudSubscription({ status: 'active' })] });
+		stripeMocks.listSubscriptions.mockReturnValue(subscriptionList([cloudSubscription({ status: 'active' })]));
 
 		await expect(
 			createCloudResubscribeSession({
 				organizationId: 'org-id',
 				stripeCustomerId: 'cus_cloud',
+			}),
+		).rejects.toThrow('already has a current subscription');
+		expect(stripeMocks.createCheckoutSession).not.toHaveBeenCalled();
+	});
+
+	it('rejects recovery when a current subscription appears after the first page', async () => {
+		const historicalSubscriptions = Array.from({ length: 100 }, (_, index) =>
+			cloudSubscription({
+				created: index,
+				id: `sub_historical_${index}`,
+				status: 'canceled',
+			}),
+		);
+		stripeMocks.listSubscriptions.mockReturnValue(
+			subscriptionList([
+				...historicalSubscriptions,
+				cloudSubscription({ created: 101, id: 'sub_current', status: 'active' }),
+			]),
+		);
+
+		await expect(
+			createCloudResubscribeSession({
+				organizationId: 'org-id',
+				stripeCustomerId: 'cus_cloud',
+				allowMissingHistory: true,
 			}),
 		).rejects.toThrow('already has a current subscription');
 		expect(stripeMocks.createCheckoutSession).not.toHaveBeenCalled();
@@ -639,4 +662,12 @@ function cloudSubscription(overrides: Partial<Stripe.Subscription> = {}): Stripe
 		trial_start: 1_799_000_000,
 		...overrides,
 	} as Stripe.Subscription;
+}
+
+function subscriptionList(subscriptions: Stripe.Subscription[]): AsyncIterable<Stripe.Subscription> {
+	return {
+		async *[Symbol.asyncIterator]() {
+			yield* subscriptions;
+		},
+	};
 }

@@ -103,7 +103,7 @@ export async function createCloudResubscribeForAdmin(input: AdminBillingInput): 
 		Boolean(organization.billingStatus || organization.trialStartedAt || organization.trialEndsAt);
 	if (
 		organization.stripeSubscriptionId
-			? !isTerminalBillingStatus(organization.billingStatus)
+			? !organization.stripeCustomerId || !isTerminalBillingStatus(organization.billingStatus)
 			: !isMissingSubscriptionRecovery
 	) {
 		throw new CloudBillingManagementInputError('A new subscription is not available');

@@ -351,6 +351,17 @@ describe('billing management mutations', () => {
 		});
 	});
 
+	it('rejects subscription history without its Stripe Customer', async () => {
+		testState.membership = membership({
+			billingStatus: 'canceled',
+			stripeSubscriptionId: 'sub_cloud',
+		});
+
+		await expect(caller().billing.createResubscribeSession()).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+		expect(stripeMocks.createCustomer).not.toHaveBeenCalled();
+		expect(stripeMocks.createResubscribe).not.toHaveBeenCalled();
+	});
+
 	it('starts a paid recovery Checkout when the trial was recorded without a subscription', async () => {
 		testState.membership = membership({
 			billingStatus: 'trialing',
