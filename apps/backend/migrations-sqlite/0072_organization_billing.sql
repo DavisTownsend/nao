@@ -13,7 +13,7 @@ CREATE TABLE `organization_billing` (
 	`billing_access_ends_at` integer,
 	`billing_updated_at` integer,
 	`billing_sync_token` text,
-	FOREIGN KEY (`org_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`org_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `organization_billing_stripe_customer_id_unique` ON `organization_billing` (`stripe_customer_id`);--> statement-breakpoint

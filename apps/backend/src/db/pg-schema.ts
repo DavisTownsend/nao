@@ -192,7 +192,7 @@ export const organization = pgTable('organization', {
 export const organizationBilling = pgTable('organization_billing', {
 	orgId: text('org_id')
 		.primaryKey()
-		.references(() => organization.id),
+		.references(() => organization.id, { onDelete: 'cascade' }),
 	billingPlan: text('billing_plan'),
 	billingStatus: text('billing_status', { enum: BILLING_STATUSES }),
 	trialStartedAt: timestamp('trial_started_at'),

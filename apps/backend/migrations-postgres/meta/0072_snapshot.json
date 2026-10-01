@@ -5443,7 +5443,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -8305,6 +8305,6 @@
     "tables": {},
     "columns": {}
   },
-  "id": "62f7d3e5-384d-4bff-a685-10da1df18937",
+  "id": "9edaca0c-ba85-49ca-b19c-0ef355835ca9",
   "prevId": "e69f4eec-1dbe-4c4d-b142-042da4022a99"
 }

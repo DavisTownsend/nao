@@ -205,7 +205,7 @@ export const organization = sqliteTable('organization', {
 export const organizationBilling = sqliteTable('organization_billing', {
 	orgId: text('org_id')
 		.primaryKey()
-		.references(() => organization.id),
+		.references(() => organization.id, { onDelete: 'cascade' }),
 	billingPlan: text('billing_plan'),
 	billingStatus: text('billing_status', { enum: BILLING_STATUSES }),
 	trialStartedAt: integer('trial_started_at', { mode: 'timestamp_ms' }),

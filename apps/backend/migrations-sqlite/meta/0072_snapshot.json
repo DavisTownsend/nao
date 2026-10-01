@@ -5069,7 +5069,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -7755,6 +7755,6 @@
   "internal": {
     "indexes": {}
   },
-  "id": "15d7bfca-36c9-4680-991a-e0f3d6c4e59e",
+  "id": "93c3c86e-6d3e-44dd-af96-df427696ad68",
   "prevId": "a73ac1c0-3289-4ced-a130-4ab7653a4677"
 }
