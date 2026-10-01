@@ -31,7 +31,7 @@ export function getBillingStatusView(
 		case 'past_due':
 			return {
 				label: 'Payment past due',
-				description: 'A payment failed. Access is paused until the outstanding payment is resolved.',
+				description: 'A payment failed and Stripe is retrying it. Update your payment details to keep access.',
 				variant: 'destructive',
 			};
 		case 'unpaid':
@@ -78,8 +78,8 @@ export function getBillingManagementDescription(status: string | null, hasDefaul
 	switch (status) {
 		case 'paused':
 			return hasDefaultPaymentMethod
-				? 'Your payment method is ready. Resume your subscription to restore billing.'
-				: 'Add a payment method in Stripe, then return here to resume your subscription.';
+				? 'Your payment method is ready. Resuming starts a new billing period and charges it immediately.'
+				: 'Add a payment method in Stripe, then return here to resume. Resuming starts a new billing period and charges it immediately.';
 		case 'past_due':
 		case 'unpaid':
 		case 'incomplete':

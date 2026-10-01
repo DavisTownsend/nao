@@ -88,6 +88,13 @@ function getAccessNotice(
 			description: 'Existing data remains available, but billing must be updated to run agents or make changes.',
 		};
 	}
+	if (access.status === 'past_due') {
+		return {
+			restricted: false,
+			title: 'A payment failed.',
+			description: 'Update billing details to keep full access while Stripe retries the payment.',
+		};
+	}
 
 	const remainingMs = access.trialEndsAt ? access.trialEndsAt.getTime() - now : 0;
 	if (access.status !== 'trialing' || remainingMs <= 0 || remainingMs > TRIAL_WARNING_MS) {

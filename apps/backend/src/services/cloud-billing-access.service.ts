@@ -43,6 +43,7 @@ export function hasCloudBillingAccess(
 				: isAfter(entitlement.trialEndsAt, now) &&
 						(!entitlement.billingAccessEndsAt || isAfter(entitlement.billingAccessEndsAt, now));
 		case 'active':
+		case 'past_due':
 			return entitlement.cancellationScheduled
 				? isAfter(entitlement.billingAccessEndsAt ?? entitlement.currentPeriodEndsAt, now)
 				: isAfterWithGrace(

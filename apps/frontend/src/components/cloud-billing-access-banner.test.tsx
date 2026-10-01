@@ -5,7 +5,18 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import { CloudBillingAccessBanner } from './cloud-billing-access-banner';
 
+const restrictedTrialAccess = {
+	canManageBilling: true,
+	hasAccess: false,
+	organizationId: 'project-organization',
+	requiresBillingAction: true,
+	status: 'trialing',
+	trialAvailable: false,
+	trialEndsAt: null,
+};
+
 const mocks = vi.hoisted(() => ({
+	access: {} as Record<string, unknown>,
 	cloudBillingEnabled: true,
 	invalidateQueries: vi.fn(async () => undefined),
 	navigate: vi.fn(async () => undefined),
@@ -19,17 +30,7 @@ vi.mock('@tanstack/react-query', () => ({
 		if (options.enabled === false) {
 			return { data: undefined };
 		}
-		return {
-			data: {
-				canManageBilling: true,
-				hasAccess: false,
-				organizationId: 'project-organization',
-				requiresBillingAction: true,
-				status: 'trialing',
-				trialAvailable: false,
-				trialEndsAt: null,
-			},
-		};
+		return { data: mocks.access };
 	},
 	useQueryClient: () => ({ invalidateQueries: mocks.invalidateQueries }),
 }));
@@ -46,6 +47,7 @@ vi.mock('@/main', () => ({
 }));
 
 beforeEach(() => {
+	mocks.access = restrictedTrialAccess;
 	mocks.cloudBillingEnabled = true;
 	const values = new Map<string, string>();
 	vi.stubGlobal('localStorage', {
@@ -65,6 +67,15 @@ it('stays hidden when cloud billing is disabled', () => {
 
 	render(<CloudBillingAccessBanner />);
 
+	expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it('warns about a failed payment while access is kept', () => {
+	mocks.access = { ...restrictedTrialAccess, hasAccess: true, status: 'past_due' };
+
+	render(<CloudBillingAccessBanner />);
+
+	expect(screen.getByRole('status').textContent).toContain('A payment failed.');
 	expect(screen.queryByRole('alert')).toBeNull();
 });
 

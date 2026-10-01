@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
+import { TRPCClientError } from '@trpc/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getActiveOrganizationId, setActiveOrganizationId } from './active-organization';
+import { clearStaleActiveOrganization, getActiveOrganizationId, setActiveOrganizationId } from './active-organization';
 
 describe('active organization storage', () => {
 	beforeEach(() => {
@@ -31,5 +32,16 @@ describe('active organization storage', () => {
 		localStorage.setItem('nao.active-organization-id', 'not-json');
 
 		expect(getActiveOrganizationId()).toBeNull();
+	});
+
+	it.each([
+		['NOT_FOUND', null],
+		['FORBIDDEN', 'organization-id'],
+	])('after a %s error, keeps %s as the selected organization', (code, expected) => {
+		setActiveOrganizationId('organization-id');
+
+		clearStaleActiveOrganization(new TRPCClientError('error', { result: { error: { data: { code } } } } as never));
+
+		expect(getActiveOrganizationId()).toBe(expected);
 	});
 });

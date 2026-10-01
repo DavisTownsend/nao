@@ -70,6 +70,8 @@ Create one active Product named `nao Cloud` with one active recurring Price:
 
 Record the Product ID and assign the lookup key only to a Price under that Product. nao validates both identities independently, along with the active Product, monthly interval, licensed usage type, and USD currency.
 
+The deployment configuration remains responsible for selecting the USD 2,000 Price. nao rejects an inactive, non-USD, non-monthly, metered, or zero-value Price, but it does not hard-code the unit amount so future Price replacements do not require an application release.
+
 Checkout always sells quantity `1`. nao recognizes a subscription by its Product, not its quantity, so a quantity changed in the Dashboard never revokes access.
 
 ```mermaid
@@ -132,7 +134,7 @@ Set `STRIPE_PORTAL_CONFIGURATION_ID` when nao should use a specific Portal confi
 
 In **Billing → Subscriptions and emails**, let Stripe send all billing lifecycle emails:
 
-- enable the free-trial ending reminder; Stripe sends it three days before the trial ends;
+- enable the free-trial ending reminder; Stripe sends it seven days before the trial ends;
 - enable successful payment receipts;
 - enable failed-payment and payment-action-required emails;
 - enable expiring-card reminders;
@@ -140,9 +142,11 @@ In **Billing → Subscriptions and emails**, let Stripe send all billing lifecyc
 
 Configure Stripe branding, public business details, support contact, and the customer-facing statement descriptor before enabling these emails. nao does not send billing emails and does not require SMTP for billing.
 
+Stripe does not send trial-ending reminder emails in sandbox mode. Verify the sandbox configuration and subscription lifecycle there, then validate email delivery with a controlled live-mode trial.
+
 Stripe sends these messages to the Stripe Customer email. nao sets that address from the organization admin who first creates the billing Customer. Change the Customer email in Stripe if billing notifications should go to a shared finance inbox.
 
-Configure Smart Retries deliberately and set the final action to cancel the subscription or mark it unpaid. nao restricts access as soon as Stripe reports the subscription as `past_due`.
+Configure Smart Retries deliberately and set the final action to cancel the subscription or mark it unpaid. A `past_due` subscription keeps access while Stripe retries payment, and nao restricts access once Stripe marks it `unpaid` or `canceled`. This final action is mandatory: Stripe keeps advancing the billing period of a subscription left `past_due`, so that setting would keep access indefinitely without payment.
 
 ### Trial abuse
 
@@ -225,7 +229,9 @@ At trial expiry:
 
 Cancellation takes effect at the configured billing boundary. Access continues until that boundary. A canceled or incomplete-expired subscription can start paid Checkout again without another trial.
 
-Full access is available during a confirmed trial or an entitled active subscription. Missing or expired trials and `past_due`, `unpaid`, `paused`, `incomplete`, `incomplete_expired`, or `canceled` subscriptions restrict cost-producing execution.
+Full access is available during a confirmed trial, an entitled active subscription, or a `past_due` subscription while Stripe retries payment, so a failed renewal or a 3D Secure request does not lock out a paying customer. The billing banner warns members about the failed payment. Missing or expired trials and `unpaid`, `paused`, `incomplete`, `incomplete_expired`, or `canceled` subscriptions restrict cost-producing execution.
+
+To tolerate delayed Stripe events or a temporary reconciliation failure, a locally projected `active` or `past_due` subscription remains entitled for up to 24 hours after its projected period end. A non-canceling `trialing` subscription with a saved payment method receives the same grace after its projected trial end. Scheduled cancellations and trials without a saved payment method do not receive this grace.
 
 Restricted organizations retain authentication, organization administration, billing and recovery actions, project deployment, and read-only access to existing customer data. Subscription changes never delete organization data or Stripe history.
 
@@ -278,8 +284,33 @@ Complete the sandbox setup and test-clock scenarios first. Then switch the Strip
 11. Store the live secret key, Product ID, lookup key, webhook secret, and optional Portal configuration ID in the production secret manager.
 12. Back up the target database, verify `DB_URI`, apply migrations, and deploy with `CLOUD_BILLING_ENABLED=false`.
 13. Confirm the application starts, `POST /api/billing/stripe/webhook` is absent while disabled, `billing.*` tRPC procedures return `NOT_FOUND`, and the live key and webhook secret belong to the same Stripe mode and account.
-14. Set `CLOUD_BILLING_ENABLED=true`, redeploy, create one controlled live subscription, and verify Checkout tax, Promotion Code redemption, the saved card, webhook processing, the Stripe trial email, Portal access, and invoice rendering.
-15. Monitor application logs, rate-limit metrics, disputes, refunds, Radar blocks, and Stripe Workbench during the rollout.
+14. Prepare existing customers as described in [Existing cloud organizations](#existing-cloud-organizations).
+15. Set `CLOUD_BILLING_ENABLED=true`, redeploy, complete the existing-customer cutover, create one controlled live subscription, and verify Checkout tax, Promotion Code redemption, the saved card, webhook processing, the Stripe trial email, Portal access, and invoice rendering.
+16. Monitor application logs, rate-limit metrics, disputes, refunds, Radar blocks, and Stripe Workbench during the rollout.
+
+### Existing cloud organizations
+
+Every organization created before billing is enabled has no billing state. Enabling billing restricts all of them immediately, including members who cannot manage billing. Give each existing customer a subscription so it keeps access:
+
+1. Before enabling billing, create a live Coupon for the agreed terms, for example 100% off forever for a comped customer, restricted to the `nao Cloud` Product.
+2. For each organization, create a Stripe Customer with the customer's billing email, then a subscription on the current `nao Cloud` Price with the Coupon and subscription metadata `nao_org_id=<organization id>`. Do not create a second Customer for an organization.
+3. Schedule the switch in a low-traffic window. The webhook route does not exist while billing is disabled, so Stripe queues the `customer.subscription.created` events for retry.
+4. Immediately after enabling billing, resend each `customer.subscription.created` event from Stripe Workbench. Reconciliation links the Customer to the organization from `nao_org_id`, and the hourly lifecycle job keeps it in sync afterwards.
+5. Confirm each organization shows **Active** on **Plan & Billing** and that a member can run an agent.
+
+```mermaid
+sequenceDiagram
+    participant Operator
+    participant Stripe
+    participant nao
+    Operator->>Stripe: Create Customer and comped subscription with nao_org_id
+    Stripe--xnao: Webhook queued (route absent while disabled)
+    Operator->>nao: Enable billing and redeploy
+    Operator->>Stripe: Resend customer.subscription.created
+    Stripe->>nao: Signed webhook
+    nao->>Stripe: Retrieve canonical subscription
+    nao->>nao: Link Customer to organization and grant access
+```
 
 To disable billing enforcement, set `CLOUD_BILLING_ENABLED=false` and redeploy. This does not remove billing state, webhook inbox rows, organizations, or Stripe subscriptions.
 
@@ -296,7 +327,7 @@ Use Stripe Billing test clocks to exercise:
 - card-required trial Checkout, Radar-blocked trial abuse, and abandoned Checkout;
 - successful early-customer Promotion Code redemption, the 14-day trial, and a 50%-discounted first paid invoice;
 - invalid, expired, and fully redeemed Promotion Codes, plus full-price Checkout without a code;
-- Stripe's trial-ending email three days before expiry;
+- the trial-ending subscription lifecycle; Stripe does not deliver trial reminder emails in sandbox, so validate email delivery separately in a controlled live-mode trial;
 - payment-method updates;
 - trial pause and resume;
 - successful renewals and failed payments;
@@ -337,7 +368,7 @@ flowchart LR
     Logs --> Monitoring["Deployment monitoring"]
 ```
 
-If a Customer has multiple current cloud subscriptions, reconciliation logs an error but continues with one deterministic subscription: the strongest status wins (`active`, then `trialing`, then `past_due`), the already-projected subscription breaks equal-status ties, and the oldest subscription is the final tie-breaker. Cancel the unintended subscription in Stripe to stop duplicate billing.
+If a Customer has multiple current cloud subscriptions, reconciliation logs an error but continues with one deterministic subscription: status priority is `active`, `trialing`, `past_due`, `paused`, `unpaid`, then `incomplete`; the already-projected subscription breaks equal-status ties, and the oldest subscription is the final tie-breaker. Cancel the unintended subscription in Stripe to stop duplicate billing.
 
 Monitor:
 
