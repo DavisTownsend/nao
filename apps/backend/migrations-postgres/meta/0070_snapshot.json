@@ -1,5 +1,5 @@
 {
-  "id": "9a34c8c4-200a-48c7-9cab-2affcd6dfee4",
+  "id": "bedcca12-26b6-45e7-8851-1ea79def6150",
   "prevId": "709751f9-b273-4b8a-84a5-c2c23d9993a9",
   "version": "7",
   "dialect": "postgresql",
@@ -5313,84 +5313,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "billing_plan": {
-          "name": "billing_plan",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "billing_status": {
-          "name": "billing_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "trial_started_at": {
-          "name": "trial_started_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "trial_ends_at": {
-          "name": "trial_ends_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "stripe_customer_id": {
-          "name": "stripe_customer_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "stripe_subscription_id": {
-          "name": "stripe_subscription_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "stripe_price_id": {
-          "name": "stripe_price_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "current_period_ends_at": {
-          "name": "current_period_ends_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cancellation_scheduled": {
-          "name": "cancellation_scheduled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "has_default_payment_method": {
-          "name": "has_default_payment_method",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "billing_access_ends_at": {
-          "name": "billing_access_ends_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "billing_updated_at": {
-          "name": "billing_updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "billing_sync_token": {
-          "name": "billing_sync_token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -5415,20 +5337,6 @@
           "nullsNotDistinct": false,
           "columns": [
             "slug"
-          ]
-        },
-        "organization_stripe_customer_id_unique": {
-          "name": "organization_stripe_customer_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "stripe_customer_id"
-          ]
-        },
-        "organization_stripe_subscription_id_unique": {
-          "name": "organization_stripe_subscription_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "stripe_subscription_id"
           ]
         }
       },
@@ -6834,6 +6742,82 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.shared_story_group_access": {
+      "name": "shared_story_group_access",
+      "schema": "",
+      "columns": {
+        "shared_story_id": {
+          "name": "shared_story_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "group_id": {
+          "name": "group_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "shared_story_group_access_groupId_idx": {
+          "name": "shared_story_group_access_groupId_idx",
+          "columns": [
+            {
+              "expression": "group_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "shared_story_group_access_shared_story_id_shared_story_id_fk": {
+          "name": "shared_story_group_access_shared_story_id_shared_story_id_fk",
+          "tableFrom": "shared_story_group_access",
+          "tableTo": "shared_story",
+          "columnsFrom": [
+            "shared_story_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "shared_story_group_access_group_id_user_group_id_fk": {
+          "name": "shared_story_group_access_group_id_user_group_id_fk",
+          "tableFrom": "shared_story_group_access",
+          "tableTo": "user_group",
+          "columnsFrom": [
+            "group_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "shared_story_group_access_shared_story_id_group_id_pk": {
+          "name": "shared_story_group_access_shared_story_id_group_id_pk",
+          "columns": [
+            "shared_story_id",
+            "group_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.story": {
       "name": "story",
       "schema": "",
@@ -7645,62 +7629,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.stripe_webhook_event": {
-      "name": "stripe_webhook_event",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "type": {
-          "name": "type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "stripe_object_id": {
-          "name": "stripe_object_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "livemode": {
-          "name": "livemode",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "received_at": {
-          "name": "received_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "processed_at": {
-          "name": "processed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_error": {
-          "name": "last_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

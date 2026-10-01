@@ -136,7 +136,7 @@ async function finishAutomationRun(automation: AutomationWithSchedule, run: DBAu
 			{
 				excludeFollowUps: true,
 				supportsCustomCharts: false,
-				tools: ({ chat: agentChat, agentSettings, toolContext, webTools }) =>
+				tools: ({ agentSettings, toolContext, webTools }) =>
 					getTools(
 						agentSettings,
 						{
@@ -151,7 +151,6 @@ async function finishAutomationRun(automation: AutomationWithSchedule, run: DBAu
 							}),
 						},
 						{
-							testMode: agentChat.testMode,
 							mcpEnabled: automation.mcpEnabled,
 							mcpServers: automation.mcpServers,
 							excludeFollowUps: true,
