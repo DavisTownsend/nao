@@ -160,7 +160,7 @@ describe('billing.getStatus', () => {
 			hasDefaultPaymentMethod: true,
 			canManageBilling: true,
 			hasStripeSubscription: false,
-			resubscribeAvailable: false,
+			resubscribeAvailable: true,
 			trialAvailable: false,
 		});
 	});
@@ -347,6 +347,29 @@ describe('billing management mutations', () => {
 		expect(stripeService.createCloudResubscribeSession).toHaveBeenCalledWith({
 			organizationId: 'org-id',
 			stripeCustomerId: 'cus_cloud',
+			allowMissingHistory: false,
+		});
+	});
+
+	it('starts a paid recovery Checkout when the trial was recorded without a subscription', async () => {
+		testState.membership = membership({
+			billingStatus: 'trialing',
+			trialStartedAt: new Date('2026-09-24T00:00:00.000Z'),
+			trialEndsAt: new Date('2026-10-08T00:00:00.000Z'),
+		});
+		stripeMocks.createCustomer.mockResolvedValue({ id: 'cus_recovery' });
+		stripeMocks.attachCustomer.mockResolvedValue({
+			orgId: 'org-id',
+			stripeCustomerId: 'cus_recovery',
+		});
+
+		await expect(caller().billing.createResubscribeSession()).resolves.toEqual({
+			url: 'https://checkout.stripe.com/subscription',
+		});
+		expect(stripeService.createCloudResubscribeSession).toHaveBeenCalledWith({
+			organizationId: 'org-id',
+			stripeCustomerId: 'cus_recovery',
+			allowMissingHistory: true,
 		});
 	});
 

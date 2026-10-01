@@ -98,16 +98,21 @@ export async function createCloudPaymentMethodPortalForAdmin(input: AdminBilling
 
 export async function createCloudResubscribeForAdmin(input: AdminBillingInput): Promise<string> {
 	const organization = await requireAdminOrganization(input);
+	const isMissingSubscriptionRecovery =
+		!organization.stripeSubscriptionId &&
+		Boolean(organization.billingStatus || organization.trialStartedAt || organization.trialEndsAt);
 	if (
-		!organization.stripeCustomerId ||
-		!organization.stripeSubscriptionId ||
-		!isTerminalBillingStatus(organization.billingStatus)
+		organization.stripeSubscriptionId
+			? !isTerminalBillingStatus(organization.billingStatus)
+			: !isMissingSubscriptionRecovery
 	) {
 		throw new CloudBillingManagementInputError('A new subscription is not available');
 	}
+	const stripeCustomerId = await ensureCloudCustomer(organization, input.userId);
 	return createCloudResubscribeSession({
 		organizationId: organization.id,
-		stripeCustomerId: organization.stripeCustomerId,
+		stripeCustomerId,
+		allowMissingHistory: isMissingSubscriptionRecovery,
 	});
 }
 

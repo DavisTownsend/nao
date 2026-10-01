@@ -20,7 +20,7 @@ import {
 	CloudSubscriptionUnavailableError,
 	getCloudBillingPlans,
 } from '../services/stripe.service';
-import { CLOUD_MONTHLY_PLAN } from '../types/billing';
+import { CLOUD_MONTHLY_PLAN, isTerminalBillingStatus } from '../types/billing';
 import type { HandlerErrorCode } from '../utils/error';
 import { logger } from '../utils/logger';
 import { publicProcedure, resolveOrganizationMembership } from './trpc';
@@ -99,6 +99,11 @@ export const billingRoutes = {
 			userId: ctx.user.id,
 			organizationId: ctx.organization.id,
 		});
+		const trialAvailable =
+			organization.billingStatus === null &&
+			organization.trialStartedAt === null &&
+			organization.trialEndsAt === null &&
+			organization.stripeSubscriptionId === null;
 		const { availablePlan, subscriptionPlan } = await getCloudBillingPlans(organization.stripePriceId).catch(
 			(error: unknown) => throwBillingFailure('plan lookup', 'Unable to load billing plans', error),
 		);
@@ -114,17 +119,14 @@ export const billingRoutes = {
 			hasDefaultPaymentMethod: organization.hasDefaultPaymentMethod,
 			billingAccessEndsAt: organization.billingAccessEndsAt,
 			canManageBilling: true,
-			trialAvailable:
-				organization.billingStatus === null &&
-				organization.trialStartedAt === null &&
-				organization.trialEndsAt === null &&
-				organization.stripeSubscriptionId === null,
+			trialAvailable,
 			portalAvailable: Boolean(organization.stripeCustomerId && organization.stripeSubscriptionId),
 			invoiceHistoryAvailable: Boolean(organization.stripeCustomerId),
 			paymentMethodManagementAvailable: Boolean(organization.stripeCustomerId),
 			resubscribeAvailable:
-				Boolean(organization.stripeCustomerId && organization.stripeSubscriptionId) &&
-				['canceled', 'incomplete_expired'].includes(organization.billingStatus ?? ''),
+				(!organization.stripeSubscriptionId && !trialAvailable) ||
+				(Boolean(organization.stripeCustomerId && organization.stripeSubscriptionId) &&
+					isTerminalBillingStatus(organization.billingStatus)),
 			hasStripeSubscription: Boolean(organization.stripeSubscriptionId),
 		};
 	}),

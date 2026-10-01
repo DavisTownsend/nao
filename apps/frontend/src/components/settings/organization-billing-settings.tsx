@@ -127,9 +127,15 @@ function CurrentPlanCard({ billingState }: { billingState: BillingState }) {
 
 function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 	const { billing, hasStripeSubscription, plan } = billingState;
-	if (!billing.data || hasStripeSubscription || !plan || !billing.data.trialAvailable) {
+	if (
+		!billing.data ||
+		hasStripeSubscription ||
+		!plan ||
+		(!billing.data.trialAvailable && !billing.data.resubscribeAvailable)
+	) {
 		return null;
 	}
+	const isTrialAvailable = billing.data.trialAvailable;
 
 	return (
 		<SettingsCard title='Billing setup'>
@@ -150,30 +156,42 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 						label='Billing period'
 						value={`Every ${formatBillingInterval(plan.interval, plan.intervalCount)}`}
 					/>
-					<PlanDetail label='Free trial' value={`${plan.trialDays} days, starting after Stripe Checkout`} />
+					<PlanDetail
+						label='Free trial'
+						value={
+							isTrialAvailable ? `${plan.trialDays} days, starting after Stripe Checkout` : 'Already used'
+						}
+					/>
 					<PlanDetail label='Currency' value={plan.currency.toUpperCase()} />
 				</dl>
 
 				<div className='flex flex-col items-start gap-3 border-t border-border pt-5'>
 					<p className='text-sm text-muted-foreground'>
-						Continue to Stripe to add a card and confirm this organization&apos;s {plan.trialDays}-day free
-						trial. Billing starts after the trial.
+						{isTrialAvailable
+							? `Continue to Stripe to add a card and confirm this organization's ${plan.trialDays}-day free trial. Billing starts after the trial.`
+							: 'Continue to Stripe to restore billing for this organization. Billing starts immediately.'}
 					</p>
 					{billing.data.canManageBilling ? (
 						<Button
-							onClick={billingState.openTrialCheckout}
-							isLoading={billingState.isTrialCheckoutPending}
+							onClick={isTrialAvailable ? billingState.openTrialCheckout : billingState.resubscribe}
+							isLoading={
+								isTrialAvailable
+									? billingState.isTrialCheckoutPending
+									: billingState.isResubscribePending
+							}
 						>
-							Start 14-day free trial in Stripe
+							{isTrialAvailable
+								? `Start ${plan.trialDays}-day free trial in Stripe`
+								: 'Subscribe in Stripe'}
 						</Button>
 					) : (
 						<p className='text-sm text-muted-foreground'>
 							Only an organization admin can subscribe or add billing details.
 						</p>
 					)}
-					{billingState.trialCheckoutError && (
+					{(isTrialAvailable ? billingState.trialCheckoutError : billingState.managementError) && (
 						<p className='text-sm text-destructive' role='alert'>
-							{billingState.trialCheckoutError}
+							{isTrialAvailable ? billingState.trialCheckoutError : billingState.managementError}
 						</p>
 					)}
 				</div>

@@ -368,6 +368,30 @@ describe('cloud Checkout', () => {
 		expect(stripeMocks.createCheckoutSession).not.toHaveBeenCalled();
 	});
 
+	it('creates a paid recovery Checkout when missing subscription history is explicitly allowed', async () => {
+		stripeMocks.createCheckoutSession.mockResolvedValue({
+			url: 'https://checkout.stripe.com/recovery',
+		});
+
+		await expect(
+			createCloudResubscribeSession({
+				organizationId: 'org-id',
+				stripeCustomerId: 'cus_cloud',
+				allowMissingHistory: true,
+			}),
+		).resolves.toBe('https://checkout.stripe.com/recovery');
+
+		expect(stripeMocks.createCheckoutSession).toHaveBeenCalledWith(
+			expect.objectContaining({
+				customer: 'cus_cloud',
+				subscription_data: {
+					metadata: { nao_org_id: 'org-id', nao_plan_key: 'cloud_monthly_v2' },
+				},
+			}),
+			{ idempotencyKey: 'cloud-checkout-resubscribe-v5:org-id:missing-subscription' },
+		);
+	});
+
 	it('rejects a new Checkout Session while a current subscription exists', async () => {
 		stripeMocks.listSubscriptions.mockResolvedValue({ data: [cloudSubscription({ status: 'active' })] });
 

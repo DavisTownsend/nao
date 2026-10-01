@@ -82,19 +82,20 @@ export async function createCloudCheckoutSession(input: {
 export async function createCloudResubscribeSession(input: {
 	organizationId: string;
 	stripeCustomerId: string;
+	allowMissingHistory?: boolean;
 }): Promise<string> {
 	const subscriptions = await listCloudSubscriptions(input.stripeCustomerId);
 	if (subscriptions.some((subscription) => !isTerminalBillingStatus(subscription.status))) {
 		throw new CloudSubscriptionUnavailableError('This organization already has a current subscription');
 	}
 	const latestSubscription = [...subscriptions].sort((left, right) => right.created - left.created)[0];
-	if (!latestSubscription) {
+	if (!latestSubscription && !input.allowMissingHistory) {
 		throw new CloudSubscriptionUnavailableError('This organization has no subscription history');
 	}
 	return createSubscriptionCheckoutSession({
 		...input,
 		kind: 'resubscribe',
-		operationKey: latestSubscription.id,
+		operationKey: latestSubscription?.id ?? 'missing-subscription',
 	});
 }
 
