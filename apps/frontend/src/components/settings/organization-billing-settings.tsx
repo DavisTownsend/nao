@@ -90,9 +90,10 @@ function CurrentPlanCard({ billingState }: { billingState: BillingState }) {
 						</div>
 						<p className='text-sm text-muted-foreground'>
 							{formatBillingPrice(currentPlan.amount, currentPlan.currency)} per{' '}
-							{formatBillingInterval(currentPlan.interval, currentPlan.intervalCount)}
+							{formatBillingInterval(currentPlan.interval, currentPlan.intervalCount)}, before discounts
 						</p>
 						<p className='text-sm text-muted-foreground'>{statusView.description}</p>
+						<UpcomingPaymentEstimate billingState={billingState} />
 						{billingState.isEndingAtPeriodEnd && (
 							<div className='mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2'>
 								<p className='text-sm font-medium text-foreground'>Subscription will not renew</p>
@@ -125,6 +126,44 @@ function CurrentPlanCard({ billingState }: { billingState: BillingState }) {
 	);
 }
 
+function UpcomingPaymentEstimate({ billingState }: { billingState: BillingState }) {
+	const upcomingInvoice = billingState.upcomingInvoice;
+	if (upcomingInvoice.isLoading) {
+		return (
+			<p className='text-sm text-muted-foreground' role='status'>
+				Loading the next payment estimate from Stripe…
+			</p>
+		);
+	}
+	if (upcomingInvoice.isError) {
+		return <p className='text-sm text-muted-foreground'>The next payment estimate is unavailable.</p>;
+	}
+	if (!upcomingInvoice.data) {
+		return null;
+	}
+
+	return (
+		<div className='mt-2 rounded-md border border-border bg-muted/40 px-3 py-2'>
+			<p className='text-xs text-muted-foreground'>Next payment estimate from Stripe</p>
+			<div className='mt-1 flex flex-wrap items-center gap-2'>
+				<p className='font-medium text-foreground'>
+					{formatBillingPrice(upcomingInvoice.data.amountDue, upcomingInvoice.data.currency)} on{' '}
+					{formatBillingDate(upcomingInvoice.data.nextPaymentAt)}
+				</p>
+				{upcomingInvoice.data.promotionCodes.map((code) => (
+					<Badge key={code} variant='outline'>
+						Code {code}
+					</Badge>
+				))}
+			</div>
+			<p className='mt-1 text-xs text-muted-foreground'>
+				Stripe includes active promotions, credits, and estimated taxes. The final amount can change before
+				billing.
+			</p>
+		</div>
+	);
+}
+
 function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 	const { billing, hasStripeSubscription, plan } = billingState;
 	if (
@@ -147,7 +186,7 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 						{formatBillingPrice(plan.amount, plan.currency)}
 					</div>
 					<div className='text-sm text-muted-foreground'>
-						per {formatBillingInterval(plan.interval, plan.intervalCount)}
+						per {formatBillingInterval(plan.interval, plan.intervalCount)}, before discounts
 					</div>
 				</div>
 
@@ -167,13 +206,14 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 									: 'Unavailable'
 						}
 					/>
+					{isTrialAvailable && <PlanDetail label='Due today' value='No charge' />}
 					<PlanDetail label='Currency' value={plan.currency.toUpperCase()} />
 				</dl>
 
 				<div className='flex flex-col items-start gap-3 border-t border-border pt-5'>
 					<p className='text-sm text-muted-foreground'>
 						{isTrialAvailable
-							? `Continue to Stripe to add a card and confirm this organization's ${plan.trialDays}-day free trial. Billing starts after the trial.`
+							? `Continue to Stripe to add a card and confirm this organization's ${plan.trialDays}-day free trial. Nothing is charged today. Stripe applies promotion codes to the recurring price, which starts after the trial.`
 							: 'Continue to Stripe to restore billing for this organization. Billing starts immediately.'}
 					</p>
 					{billing.data.canManageBilling ? (
@@ -276,13 +316,25 @@ function InvoicesCard({ billingState }: { billingState: BillingState }) {
 										{formatInvoiceLabel(invoice.createdAt)}
 									</p>
 									<Badge variant='secondary'>
-										{invoice.invoiceKind === 'trial' ? 'Trial' : 'Subscription'}
+										{invoice.invoiceKind === 'trial'
+											? 'Trial'
+											: invoice.invoiceKind === 'no_charge'
+												? 'No charge'
+												: 'Subscription'}
 									</Badge>
+									{invoice.invoiceKind === 'subscription' &&
+										invoice.promotionCodes.map((code) => (
+											<Badge key={code} variant='outline'>
+												Code {code}
+											</Badge>
+										))}
 								</div>
 								<p className='text-sm text-muted-foreground'>
-									{formatBillingDate(invoice.createdAt)} ·{' '}
-									{formatBillingPrice(invoice.total, invoice.currency)} ·{' '}
-									{formatBillingStatus(invoice.status)}
+									{invoice.invoiceKind === 'trial'
+										? `${formatBillingDate(invoice.createdAt)} · No charge during trial`
+										: invoice.invoiceKind === 'no_charge'
+											? `${formatBillingDate(invoice.createdAt)} · No charge`
+											: `${formatBillingDate(invoice.createdAt)} · ${formatBillingPrice(invoice.total, invoice.currency)} · ${formatBillingStatus(invoice.status)}`}
 								</p>
 								{invoice.number && <p className='text-xs text-muted-foreground'>{invoice.number}</p>}
 							</div>

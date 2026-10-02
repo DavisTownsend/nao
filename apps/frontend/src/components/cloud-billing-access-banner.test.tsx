@@ -67,6 +67,13 @@ it('stays hidden when cloud billing is disabled', () => {
 
 	render(<CloudBillingAccessBanner />);
 
+	expect(screen.queryByText('A subscription is needed to keep using nao Cloud.')).toBeNull();
+});
+
+it('explains the subscription requirement without presenting it as an alert', () => {
+	render(<CloudBillingAccessBanner />);
+
+	expect(screen.getByRole('status').textContent).toContain('A subscription is needed to keep using nao Cloud.');
 	expect(screen.queryByRole('alert')).toBeNull();
 });
 

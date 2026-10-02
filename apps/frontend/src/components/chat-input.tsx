@@ -33,7 +33,6 @@ import { parseBudgetError } from '@/lib/ai';
 import { cn } from '@/lib/utils';
 import { useChatId } from '@/hooks/use-chat-id';
 import { useModelSelection } from '@/hooks/use-model-selection';
-import { useOpenOrganizationBilling } from '@/hooks/use-open-organization-billing';
 import { usePermissions } from '@/hooks/use-permissions';
 import { getShortcut } from '@/lib/keyboard-shortcuts';
 import { matchesShortcut } from '@/lib/platform';
@@ -116,17 +115,10 @@ function ChatInputBase({
 		selectedModel,
 	} = useAgentContext();
 	const navigate = useNavigate();
-	const openOrganizationBilling = useOpenOrganizationBilling();
 	const { canChatWithNaoData } = usePermissions();
 	const { storyCreationEnabled } = useEffectiveUserGroupFeatures();
 	const chatId = useChatId();
 	const storyBeforeAgentSend = useStoryBeforeAgentSend();
-	const config = useQuery(trpc.system.getPublicConfig.queryOptions());
-	const billingAccess = useQuery({
-		...trpc.billing.getAccess.queryOptions(),
-		enabled: config.data?.cloudBillingEnabled === true,
-		refetchOnWindowFocus: 'always',
-	});
 
 	const isAdminMode = canChatWithNaoData && adminMode;
 	const adminModeLocked = useAgentMessagesSelector((messages) => messages.some((message) => message.role === 'user'));
@@ -400,19 +392,6 @@ function ChatInputBase({
 		[canCycleModels, cycleModel],
 	);
 
-	if (billingAccess.data?.hasAccess === false) {
-		const { canManageBilling, organizationId, trialAvailable } = billingAccess.data;
-		return (
-			<ChatCloudAccessRestricted
-				canManageBilling={canManageBilling}
-				trialAvailable={trialAvailable}
-				onManageBilling={() => void openOrganizationBilling(organizationId)}
-				className={className}
-				onCancel={onCancel}
-			/>
-		);
-	}
-
 	return (
 		<div ref={dropZoneRef} className={cn('px-3 pb-3 pt-0 md:px-4 md:pb-4 max-w-3xl w-full mx-auto', className)}>
 			<ChatInputMessageQueue onEditMessage={handleEditQueuedMessage} onSubmitNow={submitQueuedMessageWithGuard} />
@@ -519,51 +498,6 @@ function ChatInputBase({
 					</InputGroupAddon>
 				</InputGroup>
 			</form>
-		</div>
-	);
-}
-
-function ChatCloudAccessRestricted({
-	canManageBilling,
-	trialAvailable,
-	onManageBilling,
-	className,
-	onCancel,
-}: {
-	canManageBilling: boolean;
-	trialAvailable: boolean;
-	onManageBilling: () => void;
-	className?: string;
-	onCancel?: () => void;
-}) {
-	return (
-		<div className={cn('px-3 pb-3 pt-0 md:px-4 md:pb-4 max-w-3xl w-full mx-auto', className)}>
-			<div
-				className='flex flex-wrap items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm'
-				role='alert'
-			>
-				<AlertTriangle className='size-4 shrink-0 text-destructive' aria-hidden />
-				<div className='min-w-0 flex-1'>
-					<p className='font-medium text-foreground'>Agent access is paused for this organization.</p>
-					<p className='text-muted-foreground'>
-						{trialAvailable
-							? 'Start the free trial to begin chatting.'
-							: 'An active trial or subscription is required to run agents.'}
-					</p>
-				</div>
-				{onCancel && (
-					<Button type='button' size='sm' variant='ghost' onClick={onCancel}>
-						Cancel
-					</Button>
-				)}
-				{canManageBilling ? (
-					<Button size='sm' variant='secondary' onClick={onManageBilling}>
-						Manage billing
-					</Button>
-				) : (
-					<span className='text-xs text-muted-foreground'>Ask an organization admin to manage billing.</span>
-				)}
-			</div>
 		</div>
 	);
 }

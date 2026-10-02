@@ -13,6 +13,7 @@ const stripeMocks = vi.hoisted(() => ({
 	createPortal: vi.fn(),
 	createResubscribe: vi.fn(),
 	getBillingPlans: vi.fn(),
+	getUpcomingInvoice: vi.fn(),
 	listInvoices: vi.fn(),
 	reconcileCustomer: vi.fn(),
 	resumeSubscription: vi.fn(),
@@ -54,6 +55,7 @@ vi.mock('../src/services/stripe.service', () => ({
 	createCloudPortalSession: stripeMocks.createPortal,
 	createCloudResubscribeSession: stripeMocks.createResubscribe,
 	getCloudBillingPlans: stripeMocks.getBillingPlans,
+	getCloudUpcomingInvoice: stripeMocks.getUpcomingInvoice,
 	listCloudInvoices: stripeMocks.listInvoices,
 	resumeCloudSubscription: stripeMocks.resumeSubscription,
 }));
@@ -317,6 +319,26 @@ describe('billing management mutations', () => {
 
 		await expect(caller().billing.getInvoices()).rejects.toMatchObject({ code: 'FORBIDDEN' });
 		expect(stripeService.listCloudInvoices).not.toHaveBeenCalled();
+	});
+
+	it('returns the next payment exactly as previewed by Stripe', async () => {
+		const preview = {
+			amountDue: 100_000,
+			currency: 'usd',
+			nextPaymentAt: new Date('2026-10-08T00:00:00.000Z'),
+			promotionCodes: ['EARLY50'],
+		};
+		stripeMocks.getUpcomingInvoice.mockResolvedValue(preview);
+
+		await expect(caller().billing.getUpcomingInvoice()).resolves.toEqual(preview);
+		expect(stripeService.getCloudUpcomingInvoice).toHaveBeenCalledWith('sub_cloud');
+	});
+
+	it('rejects next payment previews for non-admin members', async () => {
+		testState.membership = membership({ stripeSubscriptionId: 'sub_cloud' }, 'member');
+
+		await expect(caller().billing.getUpcomingInvoice()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		expect(stripeService.getCloudUpcomingInvoice).not.toHaveBeenCalled();
 	});
 
 	it('syncs the persisted projection from current Stripe state', async () => {

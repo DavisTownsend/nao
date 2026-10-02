@@ -11,6 +11,7 @@ import {
 	createCloudPaymentMethodSession,
 	createCloudPortalSession,
 	createCloudResubscribeSession,
+	getCloudUpcomingInvoice,
 	listCloudInvoices,
 	resumeCloudSubscription,
 } from './stripe.service';
@@ -58,6 +59,11 @@ export async function createCloudTrialCheckoutForAdmin(input: AdminBillingInput)
 export async function listCloudInvoicesForAdmin(input: AdminBillingInput) {
 	const organization = await requireAdminOrganization(input);
 	return organization.stripeCustomerId ? listCloudInvoices(organization.stripeCustomerId) : [];
+}
+
+export async function getCloudUpcomingInvoiceForAdmin(input: AdminBillingInput) {
+	const organization = await requireAdminOrganization(input);
+	return organization.stripeSubscriptionId ? getCloudUpcomingInvoice(organization.stripeSubscriptionId) : null;
 }
 
 export async function syncCloudBillingForAdmin(input: AdminBillingInput): Promise<{ synced: boolean }> {

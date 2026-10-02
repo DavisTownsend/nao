@@ -9,6 +9,7 @@ import {
 	createCloudResubscribeForAdmin,
 	createCloudTrialCheckoutForAdmin,
 	getCloudBillingOrganizationForAdmin,
+	getCloudUpcomingInvoiceForAdmin,
 	listCloudInvoicesForAdmin,
 	resumeCloudSubscriptionForAdmin,
 	syncCloudBillingForAdmin,
@@ -154,6 +155,17 @@ export const billingRoutes = {
 			});
 		} catch (error) {
 			throwBillingFailure('invoice history', 'Unable to load Stripe invoices', error);
+		}
+	}),
+
+	getUpcomingInvoice: cloudBillingAdminProcedure.query(async ({ ctx }) => {
+		try {
+			return await getCloudUpcomingInvoiceForAdmin({
+				userId: ctx.user.id,
+				organizationId: ctx.organization.id,
+			});
+		} catch (error) {
+			throwBillingFailure('upcoming invoice preview', 'Unable to load the next Stripe payment', error);
 		}
 	}),
 

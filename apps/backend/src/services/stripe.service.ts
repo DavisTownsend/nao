@@ -27,13 +27,21 @@ type CloudMonthlyPrice = CloudMonthlyPriceDetails & {
 interface CloudInvoice {
 	id: string;
 	number: string | null;
-	invoiceKind: 'trial' | 'subscription';
+	invoiceKind: 'trial' | 'subscription' | 'no_charge';
+	promotionCodes: string[];
 	status: Stripe.Invoice.Status | null;
 	createdAt: Date;
 	total: number;
 	currency: string;
 	hostedInvoiceUrl: string | null;
 	invoicePdf: string | null;
+}
+
+interface CloudUpcomingInvoice {
+	amountDue: number;
+	currency: string;
+	nextPaymentAt: Date;
+	promotionCodes: string[];
 }
 
 export class CloudInitialCheckoutUnavailableError extends Error {}
@@ -106,12 +114,14 @@ async function createSubscriptionCheckoutSession(input: {
 	operationKey: string;
 	trialDays?: number;
 }): Promise<string> {
+	const trialMessage = input.trialDays === undefined ? null : checkoutTrialMessage(input.trialDays);
 	const matchesCheckout = (session: Stripe.Checkout.Session) =>
 		session.mode === 'subscription' &&
 		session.allow_promotion_codes === true &&
 		session.metadata?.[ORGANIZATION_METADATA_KEY] === input.organizationId &&
 		session.metadata?.[PLAN_METADATA_KEY] === CLOUD_MONTHLY_PLAN.key &&
-		session.metadata?.[CHECKOUT_KIND_METADATA_KEY] === input.kind;
+		session.metadata?.[CHECKOUT_KIND_METADATA_KEY] === input.kind &&
+		(trialMessage === null || session.custom_text?.submit?.message === trialMessage);
 	const existingSession = (
 		await getStripeClient().checkout.sessions.list({
 			customer: input.stripeCustomerId,
@@ -145,6 +155,7 @@ async function createSubscriptionCheckoutSession(input: {
 			allow_promotion_codes: true,
 			payment_method_collection: 'always',
 			payment_method_types: ['card'],
+			...(trialMessage ? { custom_text: { submit: { message: trialMessage } } } : {}),
 			metadata: {
 				[ORGANIZATION_METADATA_KEY]: input.organizationId,
 				[PLAN_METADATA_KEY]: CLOUD_MONTHLY_PLAN.key,
@@ -166,7 +177,7 @@ async function createSubscriptionCheckoutSession(input: {
 			cancel_url: `${billingUrl}?checkout=canceled`,
 		},
 		{
-			idempotencyKey: `cloud-checkout-${input.kind}-v5:${input.organizationId}:${input.operationKey}${latestExpiredSession ? `:${latestExpiredSession.id}` : ''}`,
+			idempotencyKey: `cloud-checkout-${input.kind}-v6:${input.organizationId}:${input.operationKey}${latestExpiredSession ? `:${latestExpiredSession.id}` : ''}`,
 		},
 	);
 	if (!session.url) {
@@ -219,6 +230,7 @@ export async function listCloudInvoices(stripeCustomerId: string): Promise<Cloud
 	const invoices: Stripe.Invoice[] = [];
 	for await (const invoice of getStripeClient().invoices.list({
 		customer: stripeCustomerId,
+		expand: ['data.discounts.promotion_code'],
 		limit: 100,
 	})) {
 		invoices.push(invoice);
@@ -226,7 +238,13 @@ export async function listCloudInvoices(stripeCustomerId: string): Promise<Cloud
 	return invoices.map((invoice) => ({
 		id: invoice.id,
 		number: invoice.number,
-		invoiceKind: invoice.billing_reason === 'subscription_create' && invoice.total === 0 ? 'trial' : 'subscription',
+		invoiceKind:
+			invoice.total !== 0
+				? 'subscription'
+				: invoice.billing_reason === 'subscription_create'
+					? 'trial'
+					: 'no_charge',
+		promotionCodes: invoicePromotionCodes(invoice),
 		status: invoice.status,
 		createdAt: new Date(invoice.created * 1_000),
 		total: invoice.total,
@@ -234,6 +252,19 @@ export async function listCloudInvoices(stripeCustomerId: string): Promise<Cloud
 		hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
 		invoicePdf: invoice.invoice_pdf ?? null,
 	}));
+}
+
+export async function getCloudUpcomingInvoice(stripeSubscriptionId: string): Promise<CloudUpcomingInvoice> {
+	const invoice = await getStripeClient().invoices.createPreview({
+		subscription: stripeSubscriptionId,
+		expand: ['discounts.promotion_code'],
+	});
+	return {
+		amountDue: invoice.amount_due,
+		currency: invoice.currency,
+		nextPaymentAt: new Date(invoice.period_end * 1_000),
+		promotionCodes: invoicePromotionCodes(invoice),
+	};
 }
 
 export async function resumeCloudSubscription(input: {
@@ -442,6 +473,23 @@ export function getStripeClient(): Stripe {
 
 function billingPageUrl(): string {
 	return new URL('/settings/organization/billing', env.BETTER_AUTH_URL).toString();
+}
+
+function checkoutTrialMessage(trialDays: number): string {
+	return `Nothing is charged today. Your ${trialDays}-day free trial starts when you confirm. The recurring price shown, including any promotion code discount, starts after the trial.`;
+}
+
+function invoicePromotionCodes(invoice: Pick<Stripe.Invoice, 'discounts'>): string[] {
+	return invoice.discounts.flatMap((discount) => {
+		if (
+			typeof discount === 'string' ||
+			discount.promotion_code === null ||
+			typeof discount.promotion_code !== 'object'
+		) {
+			return [];
+		}
+		return [discount.promotion_code.code];
+	});
 }
 
 function hasProduct(subscription: Stripe.Subscription, productId: string): boolean {

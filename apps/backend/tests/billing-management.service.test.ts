@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
 	createPaymentMethod: vi.fn(),
 	createPortal: vi.fn(),
 	createResubscribe: vi.fn(),
+	getUpcomingInvoice: vi.fn(),
 	listInvoices: vi.fn(),
 	resumeSubscription: vi.fn(),
 }));
@@ -38,6 +39,7 @@ vi.mock('../src/services/stripe.service', () => ({
 	createCloudPaymentMethodSession: mocks.createPaymentMethod,
 	createCloudPortalSession: mocks.createPortal,
 	createCloudResubscribeSession: mocks.createResubscribe,
+	getCloudUpcomingInvoice: mocks.getUpcomingInvoice,
 	listCloudInvoices: mocks.listInvoices,
 	resumeCloudSubscription: mocks.resumeSubscription,
 }));
@@ -48,6 +50,7 @@ import {
 	createCloudResubscribeForAdmin,
 	createCloudTrialCheckoutForAdmin,
 	getCloudBillingOrganizationForAdmin,
+	getCloudUpcomingInvoiceForAdmin,
 	listCloudInvoicesForAdmin,
 	resumeCloudSubscriptionForAdmin,
 	syncCloudBillingForAdmin,
@@ -65,6 +68,7 @@ describe('billing management authorization', () => {
 	it.each([
 		['billing status', () => getCloudBillingOrganizationForAdmin(adminInput)],
 		['invoices', () => listCloudInvoicesForAdmin(adminInput)],
+		['upcoming invoice', () => getCloudUpcomingInvoiceForAdmin(adminInput)],
 		['billing synchronization', () => syncCloudBillingForAdmin(adminInput)],
 		['trial Checkout', () => createCloudTrialCheckoutForAdmin(adminInput)],
 		['Customer Portal', () => createCloudPortalForAdmin(requestInput)],
@@ -82,6 +86,7 @@ describe('billing management authorization', () => {
 			mocks.createPaymentMethod,
 			mocks.createPortal,
 			mocks.createResubscribe,
+			mocks.getUpcomingInvoice,
 			mocks.listInvoices,
 			mocks.resumeSubscription,
 		]).toSatisfy((stripeCalls) => stripeCalls.every((mock) => mock.mock.calls.length === 0));

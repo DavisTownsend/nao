@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { Clock3, TriangleAlert } from 'lucide-react';
+import { Clock3, Info } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { useOpenOrganizationBilling } from '@/hooks/use-open-organization-billing';
 import { trpc } from '@/main';
 
@@ -22,36 +23,27 @@ export function CloudBillingAccessBanner() {
 	}
 
 	return (
-		<div
-			className={
-				notice.restricted
-					? 'flex flex-wrap items-center gap-3 border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm'
-					: 'flex flex-wrap items-center gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm'
-			}
-			role={notice.restricted ? 'alert' : 'status'}
+		<Callout
+			variant={notice.restricted ? 'info' : 'warning'}
+			icon={notice.restricted ? Info : Clock3}
+			className='items-center rounded-none border-x-0 border-t-0 px-4 py-2 text-sm'
+			role='status'
 			aria-live='polite'
 		>
-			{notice.restricted ? (
-				<TriangleAlert className='size-4 shrink-0 text-destructive' aria-hidden />
-			) : (
-				<Clock3 className='size-4 shrink-0 text-amber-600 dark:text-amber-400' aria-hidden />
-			)}
-			<div className='min-w-0 flex-1'>
-				<span className='font-medium text-foreground'>{notice.title}</span>{' '}
-				<span className='text-muted-foreground'>{notice.description}</span>
+			<div className='flex flex-wrap items-center gap-3'>
+				<div className='min-w-0 flex-1'>
+					<span className='font-medium text-foreground'>{notice.title}</span>{' '}
+					<span className='text-muted-foreground'>{notice.description}</span>
+				</div>
+				{access.data?.canManageBilling ? (
+					<Button size='sm' onClick={() => void openOrganizationBilling(access.data!.organizationId)}>
+						Manage billing
+					</Button>
+				) : (
+					<span className='text-xs text-muted-foreground'>Ask an organization admin to manage billing.</span>
+				)}
 			</div>
-			{access.data?.canManageBilling ? (
-				<Button
-					size='sm'
-					variant='secondary'
-					onClick={() => void openOrganizationBilling(access.data!.organizationId)}
-				>
-					Manage billing
-				</Button>
-			) : (
-				<span className='text-xs text-muted-foreground'>Ask an organization admin to manage billing.</span>
-			)}
-		</div>
+		</Callout>
 	);
 }
 
@@ -75,17 +67,17 @@ function getAccessNotice(
 	if (access.trialAvailable) {
 		return {
 			restricted: true,
-			title: "Your organization's free trial has not started.",
+			title: 'Start your free trial when you are ready.',
 			description: access.canManageBilling
-				? 'Start it when your team is ready.'
-				: 'An organization admin can start it when your team is ready.',
+				? 'Add a payment method to activate 14 days of nao Cloud.'
+				: 'An organization admin can activate 14 days of nao Cloud.',
 		};
 	}
 	if (!access.hasAccess) {
 		return {
 			restricted: true,
-			title: 'Your organization has limited access.',
-			description: 'Existing data remains available, but billing must be updated to run agents or make changes.',
+			title: 'A subscription is needed to keep using nao Cloud.',
+			description: 'Your data is safe and remains available. Subscribe to run agents and make changes.',
 		};
 	}
 	if (access.status === 'past_due') {

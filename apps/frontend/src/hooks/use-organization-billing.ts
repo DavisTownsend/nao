@@ -37,6 +37,16 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 		enabled: billing.data?.canManageBilling === true && billing.data.invoiceHistoryAvailable,
 		refetchOnWindowFocus: false,
 	});
+	const canLoadUpcomingInvoice =
+		billing.data?.canManageBilling === true &&
+		billing.data.hasStripeSubscription &&
+		!billing.data.cancellationScheduled &&
+		(billing.data.status === 'trialing' || billing.data.status === 'active' || billing.data.status === 'past_due');
+	const upcomingInvoice = useQuery({
+		...trpc.billing.getUpcomingInvoice.queryOptions(),
+		enabled: canLoadUpcomingInvoice,
+		refetchOnWindowFocus: false,
+	});
 	const trialCheckout = useMutation(
 		trpc.billing.createTrialCheckoutSession.mutationOptions({
 			onSuccess: ({ url }) => {
@@ -79,6 +89,7 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 				await Promise.all([
 					billing.refetch(),
 					invoices.refetch(),
+					...(canLoadUpcomingInvoice ? [upcomingInvoice.refetch()] : []),
 					queryClient.invalidateQueries({ queryKey: trpc.billing.getAccess.queryKey() }),
 				]);
 				setIsBillingRefreshPolling(false);
@@ -173,6 +184,7 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 	return {
 		billing,
 		invoices,
+		upcomingInvoice,
 		plan,
 		status,
 		statusView,

@@ -4,6 +4,7 @@ const stripeMocks = vi.hoisted(() => ({
 	construct: vi.fn(),
 	createCheckoutSession: vi.fn(),
 	createCustomer: vi.fn(),
+	createInvoicePreview: vi.fn(),
 	createPortalSession: vi.fn(),
 	listCheckoutSessions: vi.fn(),
 	listInvoices: vi.fn(),
@@ -32,7 +33,10 @@ vi.mock('stripe', () => ({
 			create: stripeMocks.createCustomer,
 			retrieve: stripeMocks.retrieveCustomer,
 		};
-		invoices = { list: stripeMocks.listInvoices };
+		invoices = {
+			createPreview: stripeMocks.createInvoicePreview,
+			list: stripeMocks.listInvoices,
+		};
 		prices = {
 			list: stripeMocks.listPrices,
 			retrieve: stripeMocks.retrievePrice,
@@ -58,6 +62,7 @@ import {
 	createCloudResubscribeSession,
 	getCloudBillingPlans,
 	getCloudMonthlyPrice,
+	getCloudUpcomingInvoice,
 	getStripeClient,
 	listCloudInvoices,
 	listCloudSubscriptions,
@@ -211,6 +216,12 @@ describe('cloud Checkout', () => {
 			expect.objectContaining({
 				line_items: [{ price: 'price_cloud_monthly', quantity: 1 }],
 				allow_promotion_codes: true,
+				custom_text: {
+					submit: {
+						message:
+							'Nothing is charged today. Your 14-day free trial starts when you confirm. The recurring price shown, including any promotion code discount, starts after the trial.',
+					},
+				},
 				payment_method_collection: 'always',
 				payment_method_types: ['card'],
 				automatic_tax: { enabled: true },
@@ -222,7 +233,7 @@ describe('cloud Checkout', () => {
 					trial_settings: { end_behavior: { missing_payment_method: 'pause' } },
 				},
 			}),
-			{ idempotencyKey: 'cloud-checkout-initial-v5:org-id:trial-14' },
+			{ idempotencyKey: 'cloud-checkout-initial-v6:org-id:trial-14' },
 		);
 	});
 
@@ -255,7 +266,7 @@ describe('cloud Checkout', () => {
 
 		expect(stripeMocks.createCheckoutSession).toHaveBeenCalledWith(
 			expect.objectContaining({ allow_promotion_codes: true }),
-			{ idempotencyKey: 'cloud-checkout-initial-v5:org-id:trial-14' },
+			{ idempotencyKey: 'cloud-checkout-initial-v6:org-id:trial-14' },
 		);
 	});
 
@@ -266,6 +277,12 @@ describe('cloud Checkout', () => {
 					id: 'cs_expired',
 					mode: 'subscription',
 					allow_promotion_codes: true,
+					custom_text: {
+						submit: {
+							message:
+								'Nothing is charged today. Your 14-day free trial starts when you confirm. The recurring price shown, including any promotion code discount, starts after the trial.',
+						},
+					},
 					metadata: {
 						nao_org_id: 'org-id',
 						nao_plan_key: 'cloud_monthly_v2',
@@ -287,7 +304,7 @@ describe('cloud Checkout', () => {
 		).resolves.toBe('https://checkout.stripe.com/replacement');
 
 		expect(stripeMocks.createCheckoutSession).toHaveBeenCalledWith(expect.anything(), {
-			idempotencyKey: 'cloud-checkout-initial-v5:org-id:trial-14:cs_expired',
+			idempotencyKey: 'cloud-checkout-initial-v6:org-id:trial-14:cs_expired',
 		});
 	});
 
@@ -352,7 +369,7 @@ describe('cloud Checkout', () => {
 				},
 				success_url: 'https://cloud.getnao.io/settings/organization/billing?checkout=subscribed',
 			}),
-			{ idempotencyKey: 'cloud-checkout-resubscribe-v5:org-id:sub_cloud' },
+			{ idempotencyKey: 'cloud-checkout-resubscribe-v6:org-id:sub_cloud' },
 		);
 	});
 
@@ -386,7 +403,7 @@ describe('cloud Checkout', () => {
 					metadata: { nao_org_id: 'org-id', nao_plan_key: 'cloud_monthly_v2' },
 				},
 			}),
-			{ idempotencyKey: 'cloud-checkout-resubscribe-v5:org-id:missing-subscription' },
+			{ idempotencyKey: 'cloud-checkout-resubscribe-v6:org-id:missing-subscription' },
 		);
 	});
 
@@ -492,6 +509,31 @@ describe('cloud subscription projection', () => {
 });
 
 describe('cloud billing recovery', () => {
+	it('uses Stripe to calculate the next payment after promotions', async () => {
+		stripeMocks.createInvoicePreview.mockResolvedValue({
+			amount_due: 100_000,
+			currency: 'usd',
+			period_end: 1_796_000_000,
+			discounts: [
+				{
+					id: 'di_early_customer',
+					promotion_code: { code: 'EARLY50' },
+				},
+			],
+		});
+
+		await expect(getCloudUpcomingInvoice('sub_cloud')).resolves.toEqual({
+			amountDue: 100_000,
+			currency: 'usd',
+			nextPaymentAt: new Date(1_796_000_000_000),
+			promotionCodes: ['EARLY50'],
+		});
+		expect(stripeMocks.createInvoicePreview).toHaveBeenCalledWith({
+			subscription: 'sub_cloud',
+			expand: ['discounts.promotion_code'],
+		});
+	});
+
 	it('lists a safe invoice history for the organization Customer', async () => {
 		const stripeInvoices = [
 			{
@@ -502,6 +544,12 @@ describe('cloud billing recovery', () => {
 				created: 1_795_000_000,
 				total: 200_000,
 				currency: 'usd',
+				discounts: [
+					{
+						id: 'di_early_customer',
+						promotion_code: { code: 'EARLY50' },
+					},
+				],
 				hosted_invoice_url: 'https://invoice.stripe.com/in_cloud',
 				invoice_pdf: 'https://pay.stripe.com/invoice/in_cloud/pdf',
 			},
@@ -513,8 +561,21 @@ describe('cloud billing recovery', () => {
 				created: 1_794_000_000,
 				total: 0,
 				currency: 'usd',
+				discounts: [],
 				hosted_invoice_url: 'https://invoice.stripe.com/in_trial',
 				invoice_pdf: 'https://pay.stripe.com/invoice/in_trial/pdf',
+			},
+			{
+				id: 'in_trial_extension',
+				number: 'NAO-0003',
+				billing_reason: 'subscription_update',
+				status: 'paid',
+				created: 1_793_000_000,
+				total: 0,
+				currency: 'usd',
+				discounts: [],
+				hosted_invoice_url: 'https://invoice.stripe.com/in_trial_extension',
+				invoice_pdf: 'https://pay.stripe.com/invoice/in_trial_extension/pdf',
 			},
 		];
 		stripeMocks.listInvoices.mockReturnValue({
@@ -529,6 +590,7 @@ describe('cloud billing recovery', () => {
 				id: 'in_cloud',
 				number: 'NAO-0001',
 				invoiceKind: 'subscription',
+				promotionCodes: ['EARLY50'],
 				status: 'paid',
 				createdAt: new Date(1_795_000_000_000),
 				total: 200_000,
@@ -540,6 +602,7 @@ describe('cloud billing recovery', () => {
 				id: 'in_trial',
 				number: 'NAO-0002',
 				invoiceKind: 'trial',
+				promotionCodes: [],
 				status: 'paid',
 				createdAt: new Date(1_794_000_000_000),
 				total: 0,
@@ -547,8 +610,24 @@ describe('cloud billing recovery', () => {
 				hostedInvoiceUrl: 'https://invoice.stripe.com/in_trial',
 				invoicePdf: 'https://pay.stripe.com/invoice/in_trial/pdf',
 			},
+			{
+				id: 'in_trial_extension',
+				number: 'NAO-0003',
+				invoiceKind: 'no_charge',
+				promotionCodes: [],
+				status: 'paid',
+				createdAt: new Date(1_793_000_000_000),
+				total: 0,
+				currency: 'usd',
+				hostedInvoiceUrl: 'https://invoice.stripe.com/in_trial_extension',
+				invoicePdf: 'https://pay.stripe.com/invoice/in_trial_extension/pdf',
+			},
 		]);
-		expect(stripeMocks.listInvoices).toHaveBeenCalledWith({ customer: 'cus_cloud', limit: 100 });
+		expect(stripeMocks.listInvoices).toHaveBeenCalledWith({
+			customer: 'cus_cloud',
+			expand: ['data.discounts.promotion_code'],
+			limit: 100,
+		});
 	});
 
 	it('creates a Customer Portal Session with a trusted return URL', async () => {
