@@ -687,6 +687,48 @@ export const PROVIDER_META: ProviderMetaMap = {
 		summaryModelId: 'anthropic.claude-sonnet-4-6',
 		models: [
 			{
+				id: 'global.anthropic.claude-opus-5-5',
+				name: 'Claude Opus 5.5 (Bedrock Global)',
+				contextWindow: 1_000_000,
+				costPerM: { inputNoCache: 4, inputCacheRead: 0.2, inputCacheWrite: 5, output: 20 },
+				capabilities: BEDROCK_ADAPTIVE,
+			},
+			{
+				id: 'us.anthropic.claude-opus-5-5',
+				name: 'Claude Opus 5.5 (Bedrock US)',
+				contextWindow: 1_000_000,
+				costPerM: { inputNoCache: 4, inputCacheRead: 0.2, inputCacheWrite: 5, output: 20 },
+				capabilities: BEDROCK_ADAPTIVE,
+			},
+			{
+				id: 'global.anthropic.claude-sonnet-5-5',
+				name: 'Claude Sonnet 5.5 (Bedrock Global)',
+				contextWindow: 1_000_000,
+				costPerM: { inputNoCache: 2, inputCacheRead: 0.2, inputCacheWrite: 2.5, output: 10 },
+				capabilities: BEDROCK_ADAPTIVE,
+			},
+			{
+				id: 'us.anthropic.claude-sonnet-5-5',
+				name: 'Claude Sonnet 5.5 (Bedrock US)',
+				contextWindow: 1_000_000,
+				costPerM: { inputNoCache: 2, inputCacheRead: 0.2, inputCacheWrite: 2.5, output: 10 },
+				capabilities: BEDROCK_ADAPTIVE,
+			},
+			{
+				id: 'global.anthropic.claude-sonnet-5',
+				name: 'Claude Sonnet 5 (Bedrock Global)',
+				contextWindow: 1_000_000,
+				costPerM: { inputNoCache: 2, inputCacheRead: 0.2, inputCacheWrite: 2.5, output: 10 },
+				capabilities: BEDROCK_ADAPTIVE,
+			},
+			{
+				id: 'us.anthropic.claude-sonnet-5',
+				name: 'Claude Sonnet 5 (Bedrock US)',
+				contextWindow: 1_000_000,
+				costPerM: { inputNoCache: 2, inputCacheRead: 0.2, inputCacheWrite: 2.5, output: 10 },
+				capabilities: BEDROCK_ADAPTIVE,
+			},
+			{
 				id: 'us.anthropic.claude-sonnet-4-6',
 				name: 'Claude Sonnet 4.6 (Bedrock US)',
 				default: true,
