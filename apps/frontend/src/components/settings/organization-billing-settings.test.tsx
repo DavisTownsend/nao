@@ -199,6 +199,7 @@ function billingState(): BillingState {
 			isLoading: false,
 		} as BillingState['billing'],
 		canLoadUpcomingInvoice:
+			data.canManageBilling === true &&
 			data.hasStripeSubscription &&
 			!data.cancellationScheduled &&
 			(data.status === 'trialing' || data.status === 'active' || data.status === 'past_due'),

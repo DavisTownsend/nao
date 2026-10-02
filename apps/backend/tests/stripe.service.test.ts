@@ -543,7 +543,7 @@ describe('cloud billing recovery', () => {
 				status: 'paid',
 				created: 1_795_000_000,
 				subtotal: 200_000,
-				total: 200_000,
+				total: 100_000,
 				currency: 'usd',
 				discounts: [
 					{
@@ -614,7 +614,7 @@ describe('cloud billing recovery', () => {
 				promotionCodes: ['EARLY50'],
 				status: 'paid',
 				createdAt: new Date(1_795_000_000_000),
-				total: 200_000,
+				total: 100_000,
 				currency: 'usd',
 				hostedInvoiceUrl: 'https://invoice.stripe.com/in_cloud',
 				invoicePdf: 'https://pay.stripe.com/invoice/in_cloud/pdf',
