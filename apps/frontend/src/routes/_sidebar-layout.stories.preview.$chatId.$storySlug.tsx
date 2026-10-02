@@ -6,6 +6,7 @@ import { useCallback, useMemo, useState } from 'react';
 import type { ParsedChartBlock, ParsedMapBlock, ParsedTableBlock } from '@nao/shared/story-segments';
 import type { QueryDataMap } from '@/components/story-embeds';
 import type { SelectionData } from '@/components/highlight-bubble';
+import { CustomStoryPreviewPage } from '@/components/custom-story/custom-story-page';
 import { StoryChartEmbed, StoryMapEmbed, StoryTableEmbed } from '@/components/story-embeds';
 import { HighlightBubble } from '@/components/highlight-bubble';
 import { StoryTabbedContent } from '@/components/story-tabbed-content';
@@ -37,6 +38,15 @@ export const Route = createFileRoute('/_sidebar-layout/stories/preview/$chatId/$
 
 function StoryPreviewPage() {
 	const { chatId, storySlug } = Route.useParams();
+	const { data: versions } = useSuspenseQuery(trpc.story.listVersions.queryOptions({ chatId, storySlug }));
+
+	if (versions.format === 'custom') {
+		return <CustomStoryPreviewPage chatId={chatId} storySlug={storySlug} />;
+	}
+	return <ClassicStoryPreviewPage chatId={chatId} storySlug={storySlug} />;
+}
+
+function ClassicStoryPreviewPage({ chatId, storySlug }: { chatId: string; storySlug: string }) {
 	const { data: story } = useSuspenseQuery(trpc.story.getLatest.queryOptions({ chatId, storySlug }));
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
@@ -134,10 +144,10 @@ function StoryPreviewPage() {
 				}}
 				versionControls={{
 					currentVersion: editor.versionNav.currentVersion,
-					totalVersions: editor.versionNav.totalVersions,
+					versionDates: editor.versionNav.versionDates,
+					versionDate: editor.versionNav.versionDate,
 					isViewingLatest: editor.versionNav.isViewingLatest,
-					onPrevious: editor.versionNav.goToPrevious,
-					onNext: editor.versionNav.goToNext,
+					onSelectVersion: editor.versionNav.goToVersion,
 					onRestore: editor.handleRestore,
 				}}
 			/>
