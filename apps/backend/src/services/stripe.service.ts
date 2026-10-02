@@ -241,7 +241,7 @@ export async function listCloudInvoices(stripeCustomerId: string): Promise<Cloud
 		invoiceKind:
 			invoice.total !== 0
 				? 'subscription'
-				: invoice.billing_reason === 'subscription_create'
+				: invoice.billing_reason === 'subscription_create' && invoice.subtotal === 0
 					? 'trial'
 					: 'no_charge',
 		promotionCodes: invoicePromotionCodes(invoice),

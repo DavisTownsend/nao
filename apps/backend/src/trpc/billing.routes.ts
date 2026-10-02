@@ -81,7 +81,7 @@ export const billingRoutes = {
 		const billing = await getOrganizationBilling(ctx.organization.id);
 		return {
 			organizationId: ctx.organization.id,
-			hasAccess: hasCloudBillingAccess(true, billing),
+			hasAccess: hasCloudBillingAccess(billing),
 			status: billing?.billingStatus ?? null,
 			trialEndsAt: billing?.trialEndsAt ?? null,
 			canManageBilling: ctx.orgRole === 'admin',

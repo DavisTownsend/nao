@@ -185,6 +185,7 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 		billing,
 		invoices,
 		upcomingInvoice,
+		canLoadUpcomingInvoice,
 		plan,
 		status,
 		statusView,

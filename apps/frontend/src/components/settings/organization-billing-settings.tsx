@@ -127,6 +127,9 @@ function CurrentPlanCard({ billingState }: { billingState: BillingState }) {
 }
 
 function UpcomingPaymentEstimate({ billingState }: { billingState: BillingState }) {
+	if (!billingState.canLoadUpcomingInvoice) {
+		return null;
+	}
 	const upcomingInvoice = billingState.upcomingInvoice;
 	if (upcomingInvoice.isLoading) {
 		return (

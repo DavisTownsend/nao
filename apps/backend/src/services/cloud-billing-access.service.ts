@@ -1,4 +1,6 @@
 import { isCloudBillingEnabled } from '../env';
+import { getOrganizationBilling } from '../queries/billing.queries';
+import { getProjectById } from '../queries/project.queries';
 import type { BillingStatus } from '../types/billing';
 import { HandlerError } from '../utils/error';
 
@@ -21,18 +23,12 @@ class CloudBillingAccessRestrictedError extends HandlerError {
 	}
 }
 
-export function hasCloudBillingAccess(
-	billingEnabled: boolean,
-	entitlement: CloudBillingEntitlement | null,
-	now = new Date(),
-): boolean {
-	if (!billingEnabled) {
-		return true;
-	}
+export function hasCloudBillingAccess(entitlement: CloudBillingEntitlement | null): boolean {
 	if (!entitlement) {
 		return false;
 	}
 
+	const now = new Date();
 	switch (entitlement.billingStatus) {
 		case 'trialing':
 			if (entitlement.stripeSubscriptionId === null) {
@@ -56,25 +52,23 @@ export function hasCloudBillingAccess(
 	}
 }
 
-export async function hasOrganizationCloudBillingAccess(organizationId: string, now = new Date()): Promise<boolean> {
+export async function hasOrganizationCloudBillingAccess(organizationId: string): Promise<boolean> {
 	if (!isCloudBillingEnabled()) {
 		return true;
 	}
-	const { getOrganizationBilling } = await import('../queries/billing.queries');
 	const billing = await getOrganizationBilling(organizationId);
-	return hasCloudBillingAccess(true, billing, now);
+	return hasCloudBillingAccess(billing);
 }
 
-export async function hasProjectCloudBillingAccess(projectId: string, now = new Date()): Promise<boolean> {
+export async function hasProjectCloudBillingAccess(projectId: string): Promise<boolean> {
 	if (!isCloudBillingEnabled()) {
 		return true;
 	}
-	const { getProjectById } = await import('../queries/project.queries');
 	const project = await getProjectById(projectId);
 	if (!project?.orgId) {
 		return false;
 	}
-	return hasOrganizationCloudBillingAccess(project.orgId, now);
+	return hasOrganizationCloudBillingAccess(project.orgId);
 }
 
 export async function assertOrganizationCloudBillingAccess(organizationId: string): Promise<void> {

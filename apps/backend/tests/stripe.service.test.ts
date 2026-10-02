@@ -542,6 +542,7 @@ describe('cloud billing recovery', () => {
 				billing_reason: 'subscription_create',
 				status: 'paid',
 				created: 1_795_000_000,
+				subtotal: 200_000,
 				total: 200_000,
 				currency: 'usd',
 				discounts: [
@@ -559,6 +560,7 @@ describe('cloud billing recovery', () => {
 				billing_reason: 'subscription_create',
 				status: 'paid',
 				created: 1_794_000_000,
+				subtotal: 0,
 				total: 0,
 				currency: 'usd',
 				discounts: [],
@@ -571,11 +573,30 @@ describe('cloud billing recovery', () => {
 				billing_reason: 'subscription_update',
 				status: 'paid',
 				created: 1_793_000_000,
+				subtotal: 0,
 				total: 0,
 				currency: 'usd',
 				discounts: [],
 				hosted_invoice_url: 'https://invoice.stripe.com/in_trial_extension',
 				invoice_pdf: 'https://pay.stripe.com/invoice/in_trial_extension/pdf',
+			},
+			{
+				id: 'in_discounted_resubscription',
+				number: 'NAO-0004',
+				billing_reason: 'subscription_create',
+				status: 'paid',
+				created: 1_792_000_000,
+				subtotal: 200_000,
+				total: 0,
+				currency: 'usd',
+				discounts: [
+					{
+						id: 'di_free_resubscription',
+						promotion_code: { code: 'FREE100' },
+					},
+				],
+				hosted_invoice_url: 'https://invoice.stripe.com/in_discounted_resubscription',
+				invoice_pdf: 'https://pay.stripe.com/invoice/in_discounted_resubscription/pdf',
 			},
 		];
 		stripeMocks.listInvoices.mockReturnValue({
@@ -621,6 +642,18 @@ describe('cloud billing recovery', () => {
 				currency: 'usd',
 				hostedInvoiceUrl: 'https://invoice.stripe.com/in_trial_extension',
 				invoicePdf: 'https://pay.stripe.com/invoice/in_trial_extension/pdf',
+			},
+			{
+				id: 'in_discounted_resubscription',
+				number: 'NAO-0004',
+				invoiceKind: 'no_charge',
+				promotionCodes: ['FREE100'],
+				status: 'paid',
+				createdAt: new Date(1_792_000_000_000),
+				total: 0,
+				currency: 'usd',
+				hostedInvoiceUrl: 'https://invoice.stripe.com/in_discounted_resubscription',
+				invoicePdf: 'https://pay.stripe.com/invoice/in_discounted_resubscription/pdf',
 			},
 		]);
 		expect(stripeMocks.listInvoices).toHaveBeenCalledWith({

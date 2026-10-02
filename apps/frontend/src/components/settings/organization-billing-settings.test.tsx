@@ -12,6 +12,7 @@ type BillingState = ReturnType<typeof useOrganizationBilling>;
 type BillingData = NonNullable<BillingState['billing']['data']>;
 
 const mocks = vi.hoisted(() => ({
+	cancellationScheduled: false,
 	hasStripeSubscription: false,
 	isCheckoutPolling: false,
 	invoiceHistoryAvailable: false,
@@ -37,6 +38,7 @@ vi.mock('@/hooks/use-organization-billing', () => ({
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	mocks.cancellationScheduled = false;
 	mocks.hasStripeSubscription = false;
 	mocks.isCheckoutPolling = false;
 	mocks.invoiceHistoryAvailable = false;
@@ -132,6 +134,21 @@ it('shows the Stripe-calculated next payment separately from the list price', ()
 	expect(screen.getByText('Code EARLY50')).toBeTruthy();
 });
 
+it('hides a cached payment estimate when the subscription will not renew', () => {
+	mocks.cancellationScheduled = true;
+	mocks.hasStripeSubscription = true;
+	mocks.upcomingInvoice = {
+		amountDue: 100_000,
+		currency: 'usd',
+		nextPaymentAt: new Date('2026-10-08T00:00:00.000Z'),
+		promotionCodes: [],
+	};
+
+	render(<OrganizationBillingSettings search={{}} />);
+
+	expect(screen.queryByText('Next payment estimate from Stripe')).toBeNull();
+});
+
 it('explains trial and recurring amounts before opening Stripe Checkout', () => {
 	mocks.trialAvailable = true;
 	mocks.trialEndsAt = null;
@@ -159,7 +176,7 @@ function billingState(): BillingState {
 		availablePlan: plan,
 		billingAccessEndsAt: null,
 		canManageBilling: true,
-		cancellationScheduled: false,
+		cancellationScheduled: mocks.cancellationScheduled,
 		currentPeriodEndsAt: null,
 		hasDefaultPaymentMethod: false,
 		hasStripeSubscription: mocks.hasStripeSubscription,
@@ -181,6 +198,10 @@ function billingState(): BillingState {
 			isError: false,
 			isLoading: false,
 		} as BillingState['billing'],
+		canLoadUpcomingInvoice:
+			data.hasStripeSubscription &&
+			!data.cancellationScheduled &&
+			(data.status === 'trialing' || data.status === 'active' || data.status === 'past_due'),
 		checkoutFeedback: null,
 		hasStripeSubscription: mocks.hasStripeSubscription,
 		invoices: {
@@ -211,7 +232,7 @@ function billingState(): BillingState {
 		isBillingSyncPending: false,
 		isCheckoutConfirmationDelayed: false,
 		isCheckoutPolling: mocks.isCheckoutPolling,
-		isEndingAtPeriodEnd: false,
+		isEndingAtPeriodEnd: data.cancellationScheduled && (data.status === 'active' || data.status === 'trialing'),
 		isHistoricalSubscription: isHistoricalBillingStatus(mocks.status),
 		isPaymentMethodPortalPending: false,
 		isPortalPending: false,

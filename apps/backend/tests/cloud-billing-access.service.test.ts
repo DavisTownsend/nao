@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { hasCloudBillingAccess } from '../src/services/cloud-billing-access.service';
 import type { BillingStatus } from '../src/types/billing';
@@ -12,12 +12,19 @@ const past = new Date('2026-09-23T12:00:00.000Z');
 const recentlyPast = new Date('2026-09-24T00:00:00.000Z');
 
 describe('cloud billing access entitlement', () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		vi.setSystemTime(now);
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	it.each([
-		['billing disabled', false, null, true],
-		['unconfirmed local trial', true, entitlement('trialing', { trialEndsAt: future }), false],
+		['unconfirmed local trial', entitlement('trialing', { trialEndsAt: future }), false],
 		[
 			'trialing before its billing access end',
-			true,
 			entitlement('trialing', {
 				stripeSubscriptionId: 'sub_trial',
 				trialEndsAt: future,
@@ -25,15 +32,9 @@ describe('cloud billing access entitlement', () => {
 			}),
 			true,
 		],
-		[
-			'expired trial',
-			true,
-			entitlement('trialing', { stripeSubscriptionId: 'sub_trial', trialEndsAt: past }),
-			false,
-		],
+		['expired trial', entitlement('trialing', { stripeSubscriptionId: 'sub_trial', trialEndsAt: past }), false],
 		[
 			'trial past its access end',
-			true,
 			entitlement('trialing', {
 				stripeSubscriptionId: 'sub_trial',
 				trialEndsAt: future,
@@ -41,10 +42,9 @@ describe('cloud billing access entitlement', () => {
 			}),
 			false,
 		],
-		['trial missing its end', true, entitlement('trialing'), false],
+		['trial missing its end', entitlement('trialing'), false],
 		[
 			'paying trial within conversion grace',
-			true,
 			entitlement('trialing', {
 				stripeSubscriptionId: 'sub_trial',
 				trialEndsAt: recentlyPast,
@@ -55,7 +55,6 @@ describe('cloud billing access entitlement', () => {
 		],
 		[
 			'canceling paying trial past its end',
-			true,
 			entitlement('trialing', {
 				stripeSubscriptionId: 'sub_trial',
 				trialEndsAt: recentlyPast,
@@ -65,42 +64,34 @@ describe('cloud billing access entitlement', () => {
 			}),
 			false,
 		],
-		['active before its period end', true, entitlement('active', { currentPeriodEndsAt: future }), true],
+		['active before its period end', entitlement('active', { currentPeriodEndsAt: future }), true],
 		[
 			'renewing active within reconciliation grace',
-			true,
 			entitlement('active', { currentPeriodEndsAt: recentlyPast }),
 			true,
 		],
-		[
-			'renewing active past reconciliation grace',
-			true,
-			entitlement('active', { currentPeriodEndsAt: past }),
-			false,
-		],
-		['active missing its period end', true, entitlement('active'), false],
+		['renewing active past reconciliation grace', entitlement('active', { currentPeriodEndsAt: past }), false],
+		['active missing its period end', entitlement('active'), false],
 		[
 			'scheduled cancellation before access end',
-			true,
 			entitlement('active', { cancellationScheduled: true, billingAccessEndsAt: future }),
 			true,
 		],
 		[
 			'scheduled cancellation past access end',
-			true,
 			entitlement('active', { cancellationScheduled: true, billingAccessEndsAt: past }),
 			false,
 		],
-		['past due while Stripe retries', true, entitlement('past_due', { currentPeriodEndsAt: future }), true],
-		['past due beyond its period end', true, entitlement('past_due', { currentPeriodEndsAt: past }), false],
-		['unpaid', true, entitlement('unpaid'), false],
-		['paused', true, entitlement('paused'), false],
-		['incomplete', true, entitlement('incomplete'), false],
-		['incomplete expired', true, entitlement('incomplete_expired'), false],
-		['canceled', true, entitlement('canceled'), false],
-		['missing billing state', true, null, false],
-	] as const)('%s', (_label, billingEnabled, state, expected) => {
-		expect(hasCloudBillingAccess(billingEnabled, state, now)).toBe(expected);
+		['past due while Stripe retries', entitlement('past_due', { currentPeriodEndsAt: future }), true],
+		['past due beyond its period end', entitlement('past_due', { currentPeriodEndsAt: past }), false],
+		['unpaid', entitlement('unpaid'), false],
+		['paused', entitlement('paused'), false],
+		['incomplete', entitlement('incomplete'), false],
+		['incomplete expired', entitlement('incomplete_expired'), false],
+		['canceled', entitlement('canceled'), false],
+		['missing billing state', null, false],
+	] as const)('%s', (_label, state, expected) => {
+		expect(hasCloudBillingAccess(state)).toBe(expected);
 	});
 });
 

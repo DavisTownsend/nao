@@ -1,34 +1,35 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import { ChatError } from './chat-error';
 
 const mocks = vi.hoisted(() => ({
+	access: {
+		canManageBilling: true,
+		organizationId: 'organization-id',
+		trialAvailable: false,
+	},
 	clearError: vi.fn(),
+	copy: vi.fn(),
+	error: null as Error | null,
 	openBilling: vi.fn(),
+	queryOptions: vi.fn(),
 	resendMessage: vi.fn(async () => undefined),
 }));
 
 vi.mock('@tanstack/react-query', () => ({
-	useQuery: () => ({
-		data: {
-			canManageBilling: true,
-			organizationId: 'organization-id',
-			trialAvailable: false,
-		},
-	}),
+	useQuery: (options: { enabled?: boolean }) => {
+		mocks.queryOptions(options);
+		return { data: options.enabled === false ? undefined : mocks.access };
+	},
 }));
 
 vi.mock('@/contexts/agent.provider', () => ({
 	useAgentContext: () => ({
 		clearError: mocks.clearError,
-		error: new Error(
-			JSON.stringify({
-				error: 'Cloud billing access is restricted. Ask an organization admin to update billing.',
-			}),
-		),
+		error: mocks.error,
 		isRunning: false,
 		resendMessage: mocks.resendMessage,
 	}),
@@ -36,7 +37,7 @@ vi.mock('@/contexts/agent.provider', () => ({
 }));
 
 vi.mock('@/hooks/use-copy-to-clipboard', () => ({
-	useCopyToClipboard: () => ({ copy: vi.fn(), isCopied: false }),
+	useCopyToClipboard: () => ({ copy: mocks.copy, isCopied: false }),
 }));
 
 vi.mock('@/hooks/use-open-organization-billing', () => ({
@@ -48,6 +49,19 @@ vi.mock('@/main', () => ({
 		billing: { getAccess: { queryOptions: () => ({ queryKey: ['billing-access'] }) } },
 	},
 }));
+
+beforeEach(() => {
+	mocks.access = {
+		canManageBilling: true,
+		organizationId: 'organization-id',
+		trialAvailable: false,
+	};
+	mocks.error = new Error(
+		JSON.stringify({
+			error: 'Cloud billing access is restricted. Ask an organization admin to update billing.',
+		}),
+	);
+});
 
 afterEach(() => {
 	cleanup();
@@ -67,4 +81,43 @@ it('offers billing management and retry actions for a billing access error', asy
 		expect(mocks.clearError).toHaveBeenCalledOnce();
 		expect(mocks.resendMessage).toHaveBeenCalledWith({ messageId: 'message-id' });
 	});
+});
+
+it('offers the free trial for an eligible billing access error', () => {
+	mocks.access.trialAvailable = true;
+
+	render(<ChatError />);
+
+	expect(screen.getByText('Start your free trial, then retry your message.')).toBeTruthy();
+});
+
+it('directs members to an organization admin without offering billing management', () => {
+	mocks.access.canManageBilling = false;
+
+	render(<ChatError />);
+
+	expect(screen.getByText('Ask an organization admin to manage billing.')).toBeTruthy();
+	expect(screen.queryByRole('button', { name: 'Manage billing' })).toBeNull();
+});
+
+it('shows parsed provider details for a non-billing error without loading billing access', () => {
+	mocks.error = new Error(
+		JSON.stringify({
+			error: {
+				code: 'provider_error',
+				message: 'Provider request failed.',
+				requestId: 'request-id',
+			},
+		}),
+	);
+
+	render(<ChatError />);
+
+	expect(screen.getByText('provider_error')).toBeTruthy();
+	expect(screen.getByText('Provider request failed.')).toBeTruthy();
+	expect(screen.getByText('request-id')).toBeTruthy();
+	expect(mocks.queryOptions).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
+
+	fireEvent.click(screen.getByRole('button', { name: 'Copy provider request ID' }));
+	expect(mocks.copy).toHaveBeenCalledWith('request-id');
 });

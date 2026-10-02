@@ -440,7 +440,7 @@ const baseRawEnvSchema = z.object({
 const rawEnvSchema = z.preprocess(resolveDeprecatedEnvAliases, baseRawEnvSchema);
 const envSchema = rawEnvSchema
 	.superRefine((data, ctx) => {
-		if (data.NAO_MODE === 'cloud' && data.CLOUD_BILLING_ENABLED) {
+		if (isCloudBillingEnabled(data)) {
 			for (const variable of [
 				'STRIPE_SECRET_KEY',
 				'STRIPE_WEBHOOK_SECRET',
@@ -541,8 +541,10 @@ export function __reloadEnvForTesting(): void {
 export const isCloud = env.NAO_MODE === 'cloud';
 export const isSelfHosted = env.NAO_MODE === 'self-hosted';
 
-export function isCloudBillingEnabled(): boolean {
-	return env.NAO_MODE === 'cloud' && env.CLOUD_BILLING_ENABLED;
+export function isCloudBillingEnabled(
+	data: Pick<z.output<typeof baseRawEnvSchema>, 'NAO_MODE' | 'CLOUD_BILLING_ENABLED'> = env,
+): boolean {
+	return data.NAO_MODE === 'cloud' && data.CLOUD_BILLING_ENABLED;
 }
 
 const normalizedBaseUrl = env.BETTER_AUTH_URL.replace(/\/+$/, '');

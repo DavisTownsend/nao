@@ -341,6 +341,13 @@ describe('billing management mutations', () => {
 		expect(stripeService.getCloudUpcomingInvoice).not.toHaveBeenCalled();
 	});
 
+	it('returns no upcoming invoice preview without a subscription', async () => {
+		testState.membership = membership({ stripeCustomerId: 'cus_cloud' });
+
+		await expect(caller().billing.getUpcomingInvoice()).resolves.toBeNull();
+		expect(stripeService.getCloudUpcomingInvoice).not.toHaveBeenCalled();
+	});
+
 	it('syncs the persisted projection from current Stripe state', async () => {
 		await expect(caller().billing.syncStripeBilling()).resolves.toEqual({ synced: true });
 		expect(stripeMocks.reconcileCustomer).toHaveBeenCalledWith({
