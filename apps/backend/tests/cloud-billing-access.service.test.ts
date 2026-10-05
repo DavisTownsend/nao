@@ -103,6 +103,18 @@ describe('cloud billing access entitlement', () => {
 });
 
 describe('project cloud billing access', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mocks.isCloudBillingEnabled.mockReturnValue(true);
+	});
+
+	it('denies access when the project does not exist', async () => {
+		mocks.getProjectById.mockResolvedValue(null);
+
+		await expect(hasProjectCloudBillingAccess('missing-project')).resolves.toBe(false);
+		expect(mocks.getOrganizationBilling).not.toHaveBeenCalled();
+	});
+
 	it('reports an invalid cloud project instead of treating it as delinquent', async () => {
 		mocks.getProjectById.mockResolvedValue({ orgId: null });
 
@@ -110,6 +122,16 @@ describe('project cloud billing access', () => {
 			'Cloud project orphaned-project is not assigned to an organization.',
 		);
 		expect(mocks.getOrganizationBilling).not.toHaveBeenCalled();
+	});
+
+	it('delegates organization billing access for an assigned project', async () => {
+		mocks.getProjectById.mockResolvedValue({ orgId: 'organization-1' });
+		mocks.getOrganizationBilling.mockResolvedValue(
+			entitlement('active', { currentPeriodEndsAt: new Date('2999-01-01T00:00:00.000Z') }),
+		);
+
+		await expect(hasProjectCloudBillingAccess('project-1')).resolves.toBe(true);
+		expect(mocks.getOrganizationBilling).toHaveBeenCalledWith('organization-1');
 	});
 });
 

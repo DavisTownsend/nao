@@ -85,8 +85,8 @@ beforeEach(() => {
 	__resetStripeForTesting();
 	vi.clearAllMocks();
 	stripeMocks.listPrices.mockResolvedValue({ data: [cloudMonthlyPrice()] });
-	stripeMocks.listCheckoutSessions.mockReturnValue(checkoutSessionList([]));
-	stripeMocks.listSubscriptions.mockReturnValue(subscriptionList([]));
+	stripeMocks.listCheckoutSessions.mockReturnValue(paginatedList([]));
+	stripeMocks.listSubscriptions.mockReturnValue(paginatedList([]));
 	stripeMocks.retrieveCustomer.mockResolvedValue({
 		deleted: false,
 		default_source: null,
@@ -240,7 +240,7 @@ describe('cloud Checkout', () => {
 
 	it('replaces an open Checkout Session that does not accept promotion codes', async () => {
 		stripeMocks.listCheckoutSessions.mockReturnValueOnce(
-			checkoutSessionList([
+			paginatedList([
 				{
 					mode: 'subscription',
 					allow_promotion_codes: false,
@@ -295,9 +295,9 @@ describe('cloud Checkout', () => {
 		};
 		stripeMocks.listCheckoutSessions.mockImplementation((params: Stripe.Checkout.SessionListParams) => {
 			if (params.starting_after) {
-				return checkoutSessionList([existingSession]);
+				return paginatedList([existingSession]);
 			}
-			return checkoutSessionList(firstPage, () =>
+			return paginatedList(firstPage, () =>
 				stripeMocks.listCheckoutSessions({
 					...params,
 					starting_after: firstPage.at(-1)?.id,
@@ -323,8 +323,8 @@ describe('cloud Checkout', () => {
 	});
 
 	it('creates a new Checkout after the previous Session was expired', async () => {
-		stripeMocks.listCheckoutSessions.mockReturnValueOnce(checkoutSessionList([])).mockReturnValueOnce(
-			checkoutSessionList([
+		stripeMocks.listCheckoutSessions.mockReturnValueOnce(paginatedList([])).mockReturnValueOnce(
+			paginatedList([
 				{
 					id: 'cs_expired',
 					mode: 'subscription',
@@ -361,7 +361,7 @@ describe('cloud Checkout', () => {
 	});
 
 	it('rejects initial Checkout when Stripe already has cloud subscription history', async () => {
-		stripeMocks.listSubscriptions.mockReturnValue(subscriptionList([cloudSubscription()]));
+		stripeMocks.listSubscriptions.mockReturnValue(paginatedList([cloudSubscription()]));
 
 		await expect(
 			createCloudCheckoutSession({
@@ -380,7 +380,7 @@ describe('cloud Checkout', () => {
 			active: false,
 		});
 		stripeMocks.listPrices.mockRejectedValue(new Error('Current Price is unavailable'));
-		stripeMocks.listSubscriptions.mockReturnValue(subscriptionList([subscription]));
+		stripeMocks.listSubscriptions.mockReturnValue(paginatedList([subscription]));
 
 		await expect(listCloudSubscriptions('cus_cloud')).resolves.toEqual([subscription]);
 		expect(stripeMocks.listPrices).not.toHaveBeenCalled();
@@ -389,7 +389,7 @@ describe('cloud Checkout', () => {
 	it('recognizes a cloud Product subscription whose quantity was changed in Stripe', async () => {
 		const subscription = cloudSubscription();
 		subscription.items.data[0].quantity = 2;
-		stripeMocks.listSubscriptions.mockReturnValue(subscriptionList([subscription]));
+		stripeMocks.listSubscriptions.mockReturnValue(paginatedList([subscription]));
 
 		await expect(listCloudSubscriptions('cus_cloud')).resolves.toEqual([subscription]);
 	});
@@ -405,7 +405,7 @@ describe('cloud Checkout', () => {
 	});
 
 	it('creates a paid Checkout Session after a canceled subscription without another trial', async () => {
-		stripeMocks.listSubscriptions.mockReturnValue(subscriptionList([cloudSubscription({ status: 'canceled' })]));
+		stripeMocks.listSubscriptions.mockReturnValue(paginatedList([cloudSubscription({ status: 'canceled' })]));
 		stripeMocks.createCheckoutSession.mockResolvedValue({
 			url: 'https://checkout.stripe.com/resubscribe',
 		});
@@ -470,7 +470,7 @@ describe('cloud Checkout', () => {
 	});
 
 	it('rejects a new Checkout Session while a current subscription exists', async () => {
-		stripeMocks.listSubscriptions.mockReturnValue(subscriptionList([cloudSubscription({ status: 'active' })]));
+		stripeMocks.listSubscriptions.mockReturnValue(paginatedList([cloudSubscription({ status: 'active' })]));
 
 		await expect(
 			createCloudResubscribeSession({
@@ -492,9 +492,9 @@ describe('cloud Checkout', () => {
 		const currentSubscription = cloudSubscription({ created: 101, id: 'sub_current', status: 'active' });
 		stripeMocks.listSubscriptions.mockImplementation((params: Stripe.SubscriptionListParams) => {
 			if (params.starting_after) {
-				return subscriptionList([currentSubscription]);
+				return paginatedList([currentSubscription]);
 			}
-			return subscriptionList(historicalSubscriptions, () =>
+			return paginatedList(historicalSubscriptions, () =>
 				stripeMocks.listSubscriptions({
 					...params,
 					starting_after: historicalSubscriptions.at(-1)?.id,
@@ -857,29 +857,11 @@ function cloudSubscription(overrides: Partial<Stripe.Subscription> = {}): Stripe
 	} as Stripe.Subscription;
 }
 
-function subscriptionList(
-	subscriptions: Stripe.Subscription[],
-	nextPage?: () => AsyncIterable<Stripe.Subscription>,
-): AsyncIterable<Stripe.Subscription> & { data: Stripe.Subscription[] } {
+function paginatedList<T>(items: T[], nextPage?: () => AsyncIterable<T>): AsyncIterable<T> & { data: T[] } {
 	return {
-		data: subscriptions,
+		data: items,
 		async *[Symbol.asyncIterator]() {
-			yield* subscriptions;
-			if (nextPage) {
-				yield* nextPage();
-			}
-		},
-	};
-}
-
-function checkoutSessionList(
-	sessions: Array<Partial<Stripe.Checkout.Session>>,
-	nextPage?: () => AsyncIterable<Partial<Stripe.Checkout.Session>>,
-) {
-	return {
-		data: sessions,
-		async *[Symbol.asyncIterator]() {
-			yield* sessions;
+			yield* items;
 			if (nextPage) {
 				yield* nextPage();
 			}

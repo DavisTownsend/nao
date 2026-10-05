@@ -18,7 +18,7 @@ vi.mock('../src/utils/logger', () => ({
 	serializeError: (error: unknown) => ({ error: String(error) }),
 }));
 
-import { __resetSchedulerForTesting, registerJob, startScheduler } from '../src/services/scheduler.service';
+import { __resetSchedulerForTesting, startScheduler } from '../src/services/scheduler.service';
 
 describe('scheduler', () => {
 	beforeEach(() => {
@@ -63,7 +63,6 @@ describe('scheduler', () => {
 	});
 
 	it('claims due jobs without filtering handler names', async () => {
-		registerJob('registered.job', vi.fn());
 		mocks.claimDueJobs.mockResolvedValueOnce([]);
 
 		startScheduler();
@@ -82,7 +81,6 @@ describe('scheduler', () => {
 					}),
 			)
 			.mockResolvedValueOnce([]);
-		registerJob('registered.job', vi.fn());
 		startScheduler();
 
 		let resetFinished = false;

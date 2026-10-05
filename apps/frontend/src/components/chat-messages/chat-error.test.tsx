@@ -132,14 +132,22 @@ it('shows billing access loading state while checking who can manage billing', (
 	expect(screen.queryByRole('button', { name: 'Manage billing' })).toBeNull();
 });
 
-it('allows a failed billing access lookup to be retried', () => {
-	mocks.hasAccessData = false;
+it('retries a failed billing access refetch and clears the error', async () => {
 	mocks.queryState.isError = true;
+	mocks.refetchAccess.mockImplementationOnce(async () => {
+		mocks.queryState.isError = false;
+		return { data: mocks.access } as never;
+	});
 
-	render(<ChatError />);
+	const { rerender } = render(<ChatError />);
 
+	expect(screen.getByText('Billing details could not be loaded.')).toBeTruthy();
 	fireEvent.click(screen.getByRole('button', { name: 'Retry billing details' }));
-	expect(mocks.refetchAccess).toHaveBeenCalledOnce();
+	await waitFor(() => expect(mocks.refetchAccess).toHaveBeenCalledOnce());
+
+	rerender(<ChatError />);
+	expect(screen.queryByText('Billing details could not be loaded.')).toBeNull();
+	expect(screen.getByRole('button', { name: 'Manage billing' })).toBeTruthy();
 });
 
 it('shows parsed provider details for a non-billing error without loading billing access', () => {

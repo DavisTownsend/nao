@@ -118,4 +118,25 @@ describe('automation owner project access', () => {
 			expect.objectContaining({ billingAccessVerifiedProjectId: 'project-1' }),
 		);
 	});
+
+	it('skips a scheduled run when cloud billing access is restricted', async () => {
+		mocks.hasProjectCloudBillingAccess.mockResolvedValue(false);
+
+		await automationHandler({ automationId: 'automation-1' });
+
+		expect(mocks.hasProjectCloudBillingAccess).toHaveBeenCalledWith('project-1');
+		expect(mocks.createAutomationRun).not.toHaveBeenCalled();
+		expect(mocks.createAgent).not.toHaveBeenCalled();
+	});
+
+	it('rejects an on-demand run before creating it when cloud billing access is restricted', async () => {
+		const restrictedError = new Error('Cloud billing access is restricted.');
+		mocks.assertProjectCloudBillingAccess.mockRejectedValueOnce(restrictedError);
+
+		await expect(runAutomation('automation-1')).rejects.toBe(restrictedError);
+
+		expect(mocks.assertProjectCloudBillingAccess).toHaveBeenCalledWith('project-1');
+		expect(mocks.createAutomationRun).not.toHaveBeenCalled();
+		expect(mocks.failAutomationRun).not.toHaveBeenCalled();
+	});
 });

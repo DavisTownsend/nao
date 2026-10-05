@@ -132,7 +132,7 @@ describe('billing consistency queries', () => {
 			{
 				id: 'registered-job',
 				name: 'registered.job',
-				runAt: new Date(-1_000),
+				runAt: new Date(-2_000),
 				status: 'pending',
 			},
 			{

@@ -75,6 +75,28 @@ describe('ProjectSlackBot billing access', () => {
 		expect(thread.post).toHaveBeenCalledOnce();
 	});
 
+	it('continues validating and auto-provisioning a message sender when billing is granted', async () => {
+		slackHarness.billingAccess.mockResolvedValue(undefined);
+		const bot = new ProjectSlackBot(config);
+		const thread = {
+			id: 'slack:C123:1700000000.000100',
+			post: vi.fn(),
+		} as unknown as ConversationContext['thread'];
+		const userMessage = {
+			text: 'question',
+			author: { userId: 'slack-user' },
+		} as ConversationContext['userMessage'];
+
+		await bot['_handleWorkFlow'](thread, userMessage, { fetchUnseenMessages: false });
+
+		expect(slackHarness.billingAccess).toHaveBeenCalledWith('project-1');
+		expect(slackHarness.usersInfo).toHaveBeenCalledWith({ user: 'slack-user' });
+		expect(slackHarness.getProjectById).toHaveBeenCalledWith('project-1');
+		expect(slackHarness.ensureMessagingProviderUser).toHaveBeenCalledWith(
+			expect.objectContaining({ email: 'user@example.com', projectId: 'project-1' }),
+		);
+	});
+
 	it('checks billing before authorizing and auto-provisioning a slash-command sender', async () => {
 		const bot = new ProjectSlackBot(config);
 		const postEphemeral = vi.fn();

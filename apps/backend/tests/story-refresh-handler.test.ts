@@ -68,6 +68,17 @@ describe('scheduled Story refresh principal', () => {
 		});
 	});
 
+	it('skips a scheduled refresh when cloud billing access is restricted', async () => {
+		mocks.hasProjectCloudBillingAccess.mockResolvedValue(false);
+
+		await runScheduledStoryRefresh('story-1');
+
+		expect(mocks.startStoryRefreshActivity).not.toHaveBeenCalled();
+		expect(mocks.refreshStoryData).not.toHaveBeenCalled();
+		expect(mocks.completeActivity).not.toHaveBeenCalled();
+		expect(mocks.failActivity).not.toHaveBeenCalled();
+	});
+
 	it('fails the scheduled refresh when the owner has lost project access', async () => {
 		mocks.refreshStoryData.mockRejectedValue(new Error('You do not have access to this project.'));
 

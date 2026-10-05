@@ -180,7 +180,7 @@ function BillingAccessError({
 						Manage billing
 					</Button>
 				)}
-				{isAccessError && !access && (
+				{isAccessError && (
 					<Button size='sm' disabled={isAccessFetching} onClick={onRetryAccess}>
 						<RotateCcwIcon />
 						Retry billing details

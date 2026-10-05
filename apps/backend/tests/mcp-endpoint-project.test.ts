@@ -158,11 +158,13 @@ describe('MCP endpoint project scoping', () => {
 	});
 
 	it('rejects a project with restricted cloud billing before creating the server', async () => {
-		testState.assertProjectCloudBillingAccess.mockRejectedValueOnce(new Error('restricted'));
+		testState.assertProjectCloudBillingAccess.mockRejectedValueOnce(
+			Object.assign(new Error('restricted'), { statusCode: 403 }),
+		);
 
 		const response = await postInitialize(app, '/mcp/project-b');
 
-		expect(response.statusCode).toBe(500);
+		expect(response.statusCode).toBe(403);
 		expect(testState.createdForProjects).toEqual([]);
 	});
 

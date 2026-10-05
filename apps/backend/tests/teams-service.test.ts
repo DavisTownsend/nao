@@ -120,6 +120,7 @@ describe('TeamsService', () => {
 		teamsService.getWebhooks(firstConfig);
 		const firstProjectHandler = teamsHarness.messageHandlers[0];
 		teamsService.getWebhooks(secondConfig);
+		const secondProjectHandler = teamsHarness.messageHandlers[1];
 
 		const thread = {
 			isDM: true,
@@ -130,9 +131,18 @@ describe('TeamsService', () => {
 			text: 'question',
 			raw: { from: { aadObjectId: 'aad-id' }, conversation: { tenantId: 'sender-tenant' } },
 		});
+		await secondProjectHandler(thread, {
+			text: 'question',
+			raw: { from: { aadObjectId: 'aad-id' }, conversation: { tenantId: 'sender-tenant' } },
+		});
 
-		expect(teamsHarness.credentials).toEqual([['sender-tenant', 'app-a', 'password-a']]);
-		expect(teamsHarness.projectRole).toHaveBeenCalledWith('project-a', 'user-id');
-		expect(teamsHarness.billingAccess).toHaveBeenCalledWith('project-a');
+		expect(teamsHarness.credentials).toEqual([
+			['sender-tenant', 'app-a', 'password-a'],
+			['sender-tenant', 'app-b', 'password-b'],
+		]);
+		expect(teamsHarness.projectRole).toHaveBeenNthCalledWith(1, 'project-a', 'user-id');
+		expect(teamsHarness.projectRole).toHaveBeenNthCalledWith(2, 'project-b', 'user-id');
+		expect(teamsHarness.billingAccess).toHaveBeenNthCalledWith(1, 'project-a');
+		expect(teamsHarness.billingAccess).toHaveBeenNthCalledWith(2, 'project-b');
 	});
 });
