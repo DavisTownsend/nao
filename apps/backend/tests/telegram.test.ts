@@ -175,6 +175,14 @@ describe('Telegram user validation', () => {
 
 		expect(mocks.assertProjectCloudBillingAccess).toHaveBeenCalledWith('project-id');
 		expect(post).toHaveBeenNthCalledWith(1, '✨ nao is answering...');
+		expect(mocks.upsertMessage).toHaveBeenCalledWith({
+			role: 'user',
+			parts: [{ type: 'text', text: 'Hello' }],
+			chatId: 'chat-id',
+			senderUserId: 'user-id',
+			source: 'telegram',
+		});
+		expect(mocks.getChat).toHaveBeenCalledWith('chat-id');
 		expect(mocks.createAgent).toHaveBeenCalledOnce();
 	});
 });

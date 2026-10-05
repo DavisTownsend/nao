@@ -181,6 +181,7 @@ describe('TeamsService', () => {
 		expect(post).toHaveBeenCalledOnce();
 		expect(post).toHaveBeenCalledWith('billing blocked');
 		expect(post).not.toHaveBeenCalledWith('✨ nao is answering...');
+		expect(teamsHarness.createAgent).not.toHaveBeenCalled();
 	});
 
 	it('passes the completed billing check to agent creation', async () => {

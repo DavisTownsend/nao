@@ -210,9 +210,7 @@ async function processPaymentMethodEvent(
 		await reconcileCloudBillingCustomer({ stripeCustomerId: stripeId(customer) });
 		return;
 	}
-	if (eventType === 'payment_method.detached') {
-		await reconcileAllMappedCustomers();
-	}
+	await reconcileAllMappedCustomers();
 }
 
 async function reconcileAllMappedCustomers(): Promise<void> {

@@ -1,6 +1,8 @@
 import { TRPCError } from '@trpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type * as EnvModule from '../src/env';
+
 const mocks = vi.hoisted(() => ({
 	assertProjectCloudBillingAccess: vi.fn(),
 	getLatestRun: vi.fn(),
@@ -10,7 +12,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../src/auth', () => ({ getSession: vi.fn() }));
-vi.mock('../src/env', () => ({ env: { BETA_CONTEXT_RECOMMENDATIONS_ENABLED: true } }));
+vi.mock('../src/env', async (importOriginal) => {
+	const actual = await importOriginal<typeof EnvModule>();
+	return { ...actual, env: { ...actual.env, BETA_CONTEXT_RECOMMENDATIONS_ENABLED: true } };
+});
 vi.mock('../src/handlers/context-recommendations.handler', () => ({
 	ensureContextRecommendationsSchedule: vi.fn(),
 }));
