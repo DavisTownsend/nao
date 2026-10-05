@@ -112,30 +112,3 @@
 	stroke-width: 1.5px !important;
 	vector-effect: non-scaling-stroke;
 }
-
-.welcome-confetti-piece {
-	top: -1rem;
-	animation: welcome-confetti-fall ease-in forwards;
-}
-
-@keyframes welcome-confetti-fall {
-	0% {
-		opacity: 0;
-		transform: translate3d(0, -20px, 0) rotate(0deg);
-	}
-
-	10% {
-		opacity: 1;
-	}
-
-	100% {
-		opacity: 0;
-		transform: translate3d(var(--confetti-drift), 360px, 0) rotate(720deg);
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.welcome-confetti-piece {
-		display: none;
-	}
-}

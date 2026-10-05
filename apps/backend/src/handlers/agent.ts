@@ -38,7 +38,7 @@ export const handleAgentRoute = async (opts: HandleAgentMessageInput): Promise<H
 
 	await agentService.assertBudget(projectId, model, userId);
 
-	const source: MessageSource = adminMode ? 'admin' : 'web';
+	const source: MessageSource = mode === 'onboarding' ? 'onboarding' : adminMode ? 'admin' : 'web';
 	const scope: StorageScope = { projectId, userId };
 	let chatId = opts.chatId;
 	const isNewChat = !chatId;

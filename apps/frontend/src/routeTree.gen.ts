@@ -16,8 +16,6 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as EmbedRouteImport } from './routes/embed'
 import { Route as ConsentRouteImport } from './routes/consent'
 import { Route as SidebarLayoutRouteImport } from './routes/_sidebar-layout'
-import { Route as SidebarLayoutSetupProjectRouteImport } from './routes/_sidebar-layout.setup-project'
-import { Route as SidebarLayoutSetupGithubProjectRouteImport } from './routes/_sidebar-layout.setup-github-project'
 import { Route as SidebarLayoutSettingsRouteImport } from './routes/_sidebar-layout.settings'
 import { Route as SidebarLayoutOnboardingRouteImport } from './routes/_sidebar-layout.onboarding'
 import { Route as SidebarLayoutChatLayoutRouteImport } from './routes/_sidebar-layout._chat-layout'
@@ -104,18 +102,6 @@ const SidebarLayoutRoute = SidebarLayoutRouteImport.update({
   id: '/_sidebar-layout',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SidebarLayoutSetupProjectRoute =
-  SidebarLayoutSetupProjectRouteImport.update({
-    id: '/setup-project',
-    path: '/setup-project',
-    getParentRoute: () => SidebarLayoutRoute,
-  } as any)
-const SidebarLayoutSetupGithubProjectRoute =
-  SidebarLayoutSetupGithubProjectRouteImport.update({
-    id: '/setup-github-project',
-    path: '/setup-github-project',
-    getParentRoute: () => SidebarLayoutRoute,
-  } as any)
 const SidebarLayoutSettingsRoute = SidebarLayoutSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -425,8 +411,6 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/onboarding': typeof SidebarLayoutOnboardingRoute
   '/settings': typeof SidebarLayoutSettingsRouteWithChildren
-  '/setup-github-project': typeof SidebarLayoutSetupGithubProjectRoute
-  '/setup-project': typeof SidebarLayoutSetupProjectRoute
   '/$chatId': typeof SidebarLayoutChatLayoutChatIdRoute
   '/automations/$automationId': typeof SidebarLayoutAutomationsAutomationIdRoute
   '/settings/account': typeof SidebarLayoutSettingsAccountRoute
@@ -484,8 +468,6 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/onboarding': typeof SidebarLayoutOnboardingRoute
-  '/setup-github-project': typeof SidebarLayoutSetupGithubProjectRoute
-  '/setup-project': typeof SidebarLayoutSetupProjectRoute
   '/$chatId': typeof SidebarLayoutChatLayoutChatIdRoute
   '/automations/$automationId': typeof SidebarLayoutAutomationsAutomationIdRoute
   '/settings/account': typeof SidebarLayoutSettingsAccountRoute
@@ -543,8 +525,6 @@ export interface FileRoutesById {
   '/_sidebar-layout/_chat-layout': typeof SidebarLayoutChatLayoutRouteWithChildren
   '/_sidebar-layout/onboarding': typeof SidebarLayoutOnboardingRoute
   '/_sidebar-layout/settings': typeof SidebarLayoutSettingsRouteWithChildren
-  '/_sidebar-layout/setup-github-project': typeof SidebarLayoutSetupGithubProjectRoute
-  '/_sidebar-layout/setup-project': typeof SidebarLayoutSetupProjectRoute
   '/_sidebar-layout/_chat-layout/$chatId': typeof SidebarLayoutChatLayoutChatIdRoute
   '/_sidebar-layout/automations/$automationId': typeof SidebarLayoutAutomationsAutomationIdRoute
   '/_sidebar-layout/settings/account': typeof SidebarLayoutSettingsAccountRoute
@@ -606,8 +586,6 @@ export interface FileRouteTypes {
     | '/signup'
     | '/onboarding'
     | '/settings'
-    | '/setup-github-project'
-    | '/setup-project'
     | '/$chatId'
     | '/automations/$automationId'
     | '/settings/account'
@@ -665,8 +643,6 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/onboarding'
-    | '/setup-github-project'
-    | '/setup-project'
     | '/$chatId'
     | '/automations/$automationId'
     | '/settings/account'
@@ -723,8 +699,6 @@ export interface FileRouteTypes {
     | '/_sidebar-layout/_chat-layout'
     | '/_sidebar-layout/onboarding'
     | '/_sidebar-layout/settings'
-    | '/_sidebar-layout/setup-github-project'
-    | '/_sidebar-layout/setup-project'
     | '/_sidebar-layout/_chat-layout/$chatId'
     | '/_sidebar-layout/automations/$automationId'
     | '/_sidebar-layout/settings/account'
@@ -835,20 +809,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof SidebarLayoutRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/_sidebar-layout/setup-project': {
-      id: '/_sidebar-layout/setup-project'
-      path: '/setup-project'
-      fullPath: '/setup-project'
-      preLoaderRoute: typeof SidebarLayoutSetupProjectRouteImport
-      parentRoute: typeof SidebarLayoutRoute
-    }
-    '/_sidebar-layout/setup-github-project': {
-      id: '/_sidebar-layout/setup-github-project'
-      path: '/setup-github-project'
-      fullPath: '/setup-github-project'
-      preLoaderRoute: typeof SidebarLayoutSetupGithubProjectRouteImport
-      parentRoute: typeof SidebarLayoutRoute
     }
     '/_sidebar-layout/settings': {
       id: '/_sidebar-layout/settings'
@@ -1385,8 +1345,6 @@ interface SidebarLayoutRouteChildren {
   SidebarLayoutChatLayoutRoute: typeof SidebarLayoutChatLayoutRouteWithChildren
   SidebarLayoutOnboardingRoute: typeof SidebarLayoutOnboardingRoute
   SidebarLayoutSettingsRoute: typeof SidebarLayoutSettingsRouteWithChildren
-  SidebarLayoutSetupGithubProjectRoute: typeof SidebarLayoutSetupGithubProjectRoute
-  SidebarLayoutSetupProjectRoute: typeof SidebarLayoutSetupProjectRoute
   SidebarLayoutAutomationsAutomationIdRoute: typeof SidebarLayoutAutomationsAutomationIdRoute
   SidebarLayoutSharedChatShareIdRoute: typeof SidebarLayoutSharedChatShareIdRoute
   SidebarLayoutFeedIndexRoute: typeof SidebarLayoutFeedIndexRoute
@@ -1400,8 +1358,6 @@ const SidebarLayoutRouteChildren: SidebarLayoutRouteChildren = {
   SidebarLayoutChatLayoutRoute: SidebarLayoutChatLayoutRouteWithChildren,
   SidebarLayoutOnboardingRoute: SidebarLayoutOnboardingRoute,
   SidebarLayoutSettingsRoute: SidebarLayoutSettingsRouteWithChildren,
-  SidebarLayoutSetupGithubProjectRoute: SidebarLayoutSetupGithubProjectRoute,
-  SidebarLayoutSetupProjectRoute: SidebarLayoutSetupProjectRoute,
   SidebarLayoutAutomationsAutomationIdRoute:
     SidebarLayoutAutomationsAutomationIdRoute,
   SidebarLayoutSharedChatShareIdRoute: SidebarLayoutSharedChatShareIdRoute,

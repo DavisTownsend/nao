@@ -102,7 +102,7 @@ export function ChatInputModelSelect() {
 			return (
 				<div className='flex items-center gap-2 text-sm font-normal text-muted-foreground'>
 					{singleModel}
-					<span className='text-sm text-emerald-500/60'>Onboarding Assistant</span>
+					<span className='text-sm'>Onboarding Assistant</span>
 				</div>
 			);
 		}

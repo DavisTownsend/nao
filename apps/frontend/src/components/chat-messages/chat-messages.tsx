@@ -14,6 +14,7 @@ import {
 	checkIsLastMessageStreaming,
 	getLastFollowUpSuggestionsToolCall,
 	checkIsSomeToolsExecuting,
+	isOnboardingContextRequestMessage,
 } from '@/lib/ai';
 import {
 	Conversation,
@@ -78,7 +79,10 @@ export const ChatMessagesContent = memo(function ChatMessagesContent() {
 	const extraComponentsRef = useRef<HTMLDivElement>(null);
 	const extraComponentsHeight = useHeight(extraComponentsRef);
 	const visibleMessages = useMemo(
-		() => filterSupersededExecuteSqlParts(messages.filter((m) => !m.isForked)),
+		() =>
+			filterSupersededExecuteSqlParts(
+				messages.filter((m) => !m.isForked && !isOnboardingContextRequestMessage(m)),
+			),
 		[messages],
 	);
 	const messageGroups = useMemo(() => groupMessages(visibleMessages), [visibleMessages]);

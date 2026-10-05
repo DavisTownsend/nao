@@ -25,11 +25,11 @@ import {
 	getMessageImages,
 	getMessageText,
 	getTextFromUserMessageOrThrow,
-	isFreeMessagesExhaustedError,
 	NEW_CHAT_ID,
 	parseBudgetError,
 	resolveImagesFromMessage,
 } from '@/lib/ai';
+import { useSession } from '@/lib/auth-client';
 import { createLocalStorage } from '@/lib/local-storage';
 import { trpc } from '@/main';
 import { useChatQuery, useSetChat } from '@/queries/use-chat-query';
@@ -81,6 +81,9 @@ export interface SendMessageArgs {
 
 export const selectedModelStorage = createLocalStorage<LlmSelectedModel>('nao-selected-model');
 
+export const getOnboardingChatIdStorage = (userId: string) =>
+	createLocalStorage<string>(`nao-onboarding-chat-id:${userId}`);
+
 const agentCitationStore = new WeakMap<Agent<UIMessage>, CitationData | undefined>();
 /** Admin mode captured at send time, so an ack-time toggle cannot mislabel the message. */
 const agentAdminModeStore = new WeakMap<Agent<UIMessage>, boolean>();
@@ -100,13 +103,17 @@ export const useAgent = ({
 	mode?: AgentMode;
 } = {}): AgentState => {
 	const navigate = useNavigate();
-	const chatId = useChatId();
+	const contextChatId = useChatId();
+	const [chatId, setChatId] = useState(contextChatId);
 	const chat = useChatQuery({ chatId });
+	const { data: session } = useSession();
 
 	const [selectedModel, setSelectedModel] = useLocalStorage(selectedModelStorage);
 	const setChat = useSetChat();
 	const queryClient = useQueryClient();
 
+	const userIdRef = useRef(session?.user.id);
+	userIdRef.current = session?.user.id;
 	const chatIdRef = useRef(chatId);
 	chatIdRef.current = chatId;
 	const selectedModelRef = useRef<LlmSelectedModel | null>(null);
@@ -116,6 +123,10 @@ export const useAgent = ({
 	const adminModeRef = useRef(false);
 	/** Set to the server id of a chat that was just created, so the upcoming chatId change is treated as the same conversation continuing rather than opening a different chat. */
 	const continuationChatIdRef = useRef<string | undefined>(undefined);
+
+	useEffect(() => {
+		setChatId(contextChatId);
+	}, [contextChatId]);
 
 	const setMentions = useCallback((mentions: MentionOption[]) => {
 		mentionsRef.current = mentions;
@@ -127,7 +138,7 @@ export const useAgent = ({
 	}, []);
 
 	const agentInstance = useMemo(() => {
-		let agentId = chatId ?? NEW_CHAT_ID;
+		let agentId = contextChatId ?? NEW_CHAT_ID;
 
 		if (!disableNavigation) {
 			const existingAgent = agentService.getAgent(agentId);
@@ -139,6 +150,10 @@ export const useAgent = ({
 		const handleAgentDataPart = (dataPart: InferUIMessageChunk<UIMessage>, agent: Agent<UIMessage>) => {
 			if (dataPart.type === 'data-newChat') {
 				const newChat = dataPart.data;
+				setChatId(newChat.id);
+				if (mode === 'onboarding' && userIdRef.current) {
+					getOnboardingChatIdStorage(userIdRef.current).set(newChat.id);
+				}
 				if (agentId !== newChat.id) {
 					messageQueueStore.moveQueue(agentId, newChat.id);
 					if (!disableNavigation) {
@@ -175,7 +190,9 @@ export const useAgent = ({
 								...message,
 								id: newId,
 								...(citation && { citation }),
-								...(sentInAdminMode && { source: 'admin' as const }),
+								...(mode === 'onboarding'
+									? { source: 'onboarding' as const }
+									: sentInAdminMode && { source: 'admin' as const }),
 							}
 						: message,
 				);
@@ -255,7 +272,7 @@ export const useAgent = ({
 		}
 
 		return agentService.registerAgent(agentId, newAgent);
-	}, [chatId, disableNavigation, navigate, setChat, queryClient, mode]);
+	}, [contextChatId, disableNavigation, navigate, setChat, queryClient, mode]);
 
 	agentSendRefsStore.set(agentInstance, { adminModeRef, selectedModelRef, mentionsRef });
 
@@ -284,7 +301,7 @@ export const useAgent = ({
 	}, [chatId]);
 
 	useEffect(() => {
-		if (!parseBudgetError(error) && !isFreeMessagesExhaustedError(error)) {
+		if (!parseBudgetError(error)) {
 			return;
 		}
 		const lastMsg = messages.at(-1);

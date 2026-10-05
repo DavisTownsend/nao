@@ -14,7 +14,7 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 load_dotenv()
 
@@ -151,14 +151,17 @@ class CompileSemanticQueryResponse(BaseModel):
     database_id: str
     dialect: str
 
+
 class PrepareWarehouseRequest(BaseModel):
     project_name: str
     provider: str
     credentials: dict[str, object]
 
+
 class PrepareWarehouseResponse(BaseModel):
     database_config: dict[str, object]
     env_vars: dict[str, str]
+
 
 def _validate_sql(
     sql: str,
@@ -486,12 +489,26 @@ async def prepare_warehouse(request: PrepareWarehouseRequest):
             database_config=database_config,
             env_vars=env_vars,
         )
+    except ValidationError as error:
+        fields = sorted(
+            {
+                ".".join(str(part) for part in issue["loc"])
+                for issue in error.errors(include_input=False)
+            }
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "invalid_warehouse_credentials",
+                "fields": fields,
+            },
+        ) from error
     except (ValueError, TypeError) as error:
         raise HTTPException(
             status_code=422,
             detail="Invalid warehouse credentials",
         ) from error
-        
-        
+
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=port, reload=True)

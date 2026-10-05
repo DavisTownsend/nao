@@ -97,7 +97,7 @@ export const SQL_PROVIDER_SETTINGS: Record<SqlProvider, SqlProviderSettings> = {
 		label: 'Fabric',
 		defaultName: 'fabric-prod',
 		defaultPort: 1433,
-		fields: ['host', 'port', 'database', 'clientId', 'clientSecret', 'authMode', 'tenantId', 'driver'],
+		fields: ['host', 'port', 'database', 'clientId', 'clientSecret', 'tenantId'],
 	},
 	motherduck: {
 		label: 'MotherDuck',
@@ -123,7 +123,7 @@ export const SQL_PROVIDER_SETTINGS: Record<SqlProvider, SqlProviderSettings> = {
 		defaultName: 'postgres-prod',
 		defaultPort: 5432,
 		schemaHint: '(optional, uses public by default)',
-		fields: ['catalog', 'host', 'port', 'database', 'user', 'password', 'schemaName'],
+		fields: ['host', 'port', 'database', 'user', 'password', 'schemaName'],
 	},
 	redshift: {
 		label: 'Amazon Redshift',

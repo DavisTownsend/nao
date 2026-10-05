@@ -2,7 +2,11 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod/v4';
 
 import * as organizationQueries from '../queries/organization.queries';
-import { getWarehouseProvisioningJob, startWarehouseProvisioning } from '../services/warehouse-provisioning';
+import {
+	getActiveWarehouseProvisioningJob,
+	getWarehouseProvisioningJob,
+	startWarehouseProvisioning,
+} from '../services/warehouse-provisioning';
 import { warehouseProvisioningInputSchema } from '../types/warehouse';
 import { protectedProcedure, router } from './trpc';
 
@@ -32,14 +36,20 @@ export const onboardingRoutes = router({
 			});
 		}),
 
-	getWarehouseProvisioningStatus: protectedProcedure.input(z.object({ jobId: z.uuid() })).query(({ ctx, input }) => {
-		const job = getWarehouseProvisioningJob(input.jobId, ctx.user.id);
-		if (!job) {
-			throw new TRPCError({
-				code: 'NOT_FOUND',
-				message: 'Warehouse setup job not found',
-			});
-		}
-		return job;
-	}),
+	getWarehouseProvisioningStatus: protectedProcedure
+		.input(z.object({ jobId: z.uuid() }))
+		.query(async ({ ctx, input }) => {
+			const job = await getWarehouseProvisioningJob(input.jobId, ctx.user.id);
+			if (!job) {
+				throw new TRPCError({
+					code: 'NOT_FOUND',
+					message: 'Warehouse setup job not found',
+				});
+			}
+			return job;
+		}),
+
+	getActiveWarehouseProvisioningJob: protectedProcedure
+		.input(z.object({ onboardingChatId: z.uuid() }))
+		.query(({ ctx, input }) => getActiveWarehouseProvisioningJob(ctx.user.id, input.onboardingChatId)),
 });

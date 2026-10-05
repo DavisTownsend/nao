@@ -32,7 +32,6 @@ function SignUp() {
 			await signUp.email(value, {
 				onSuccess: () => {
 					rememberSignInMethod('email');
-					sessionStorage.setItem('welcome-reward-popup', 'true');
 					if (safeRedirect) {
 						router.history.push(safeRedirect);
 					} else {

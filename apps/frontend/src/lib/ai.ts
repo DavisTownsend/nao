@@ -82,7 +82,15 @@ export const checkIsAgentRunning = (agent: Pick<UseChatHelpers<UIMessage>, 'stat
 
 /** Tools that should NOT be collapsed (important UI elements), per density setting. */
 const NON_COLLAPSIBLE_TOOLS_BY_DENSITY: Record<ToolCallDensity, (StaticToolName | DynamicToolName)[]> = {
-	compact: ['story', 'display_chart', 'display_map', 'suggest_follow_ups', 'clarification'],
+	compact: [
+		'story',
+		'display_chart',
+		'display_map',
+		'suggest_follow_ups',
+		'clarification',
+		'request_warehouse_credentials',
+		'generate_onboarding_rules',
+	],
 	detailed: [
 		'story',
 		'task',
@@ -96,6 +104,8 @@ const NON_COLLAPSIBLE_TOOLS_BY_DENSITY: Record<ToolCallDensity, (StaticToolName 
 		'clarification',
 		'execute_python',
 		'execute_sandboxed_code',
+		'request_warehouse_credentials',
+		'generate_onboarding_rules',
 	],
 };
 
@@ -306,6 +316,12 @@ export const getMessageText = (message: UIMessage): string => {
 		.join('\n');
 };
 
+export const ONBOARDING_CONTEXT_REQUEST_PREFIX = '[internal:onboarding-context-request]';
+
+export const isOnboardingContextRequestMessage = (message: UIMessage): boolean => {
+	return message.role === 'user' && getMessageText(message).startsWith(ONBOARDING_CONTEXT_REQUEST_PREFIX);
+};
+
 export const getMessageImages = (message: UIMessage): { url: string; mediaType: string }[] => {
 	return getFileParts(message)
 		.filter((part) => part.mediaType.startsWith('image/'))
@@ -474,17 +490,5 @@ export function parseBudgetError(error: Error | undefined): string | null {
 		return parsed.code === 'BUDGET_EXCEEDED' ? (parsed.error ?? parsed.message ?? error.message) : null;
 	} catch {
 		return null;
-	}
-}
-
-export function isFreeMessagesExhaustedError(error: Error | undefined): boolean {
-	if (!error) {
-		return false;
-	}
-	try {
-		const parsed = JSON.parse(error.message);
-		return parsed.code === 'FREE_MESSAGES_EXHAUSTED' || parsed.error?.code === 'FREE_MESSAGES_EXHAUSTED';
-	} catch {
-		return false;
 	}
 }

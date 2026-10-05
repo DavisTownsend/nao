@@ -59,6 +59,10 @@ export const createProject = async (project: NewProject): Promise<DBProject> => 
 	return created;
 };
 
+export const deleteProject = async (projectId: string): Promise<void> => {
+	await db.delete(s.project).where(eq(s.project.id, projectId)).execute();
+};
+
 export const getProjectMember = async (projectId: string, userId: string): Promise<DBProjectMember | null> => {
 	const [member] = await db
 		.select()

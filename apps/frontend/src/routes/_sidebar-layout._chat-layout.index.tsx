@@ -170,13 +170,12 @@ function HomePage() {
 									<ChatInput variant='example' />
 									<SavedPromptSuggestions />
 								</div>
-								<div className='grid w-full max-w-3xl grid-cols-1 gap-4 px-4 py-6 sm:grid-cols-2'>
+								<div className='flex w-full max-w-3xl justify-center px-4 py-6'>
 									<HomeLinkCard
 										to='/onboarding'
 										label='Guided setup'
 										title='Set up your nao project'
 										subtitle='Chat with the onboarding agent'
-										tone='green'
 										icon={<MessageCircle className='size-5' />}
 									/>
 								</div>
@@ -244,52 +243,29 @@ function HomeLinkCard({
 	label,
 	title,
 	subtitle,
-	tone,
 	icon,
 }: {
-	to: '/onboarding' | '/setup-github-project';
+	to: '/onboarding';
 	label: string;
 	title: string;
 	subtitle: string;
-	tone: 'green' | 'violet';
 	icon: React.ReactNode;
 }) {
-	const isGreen = tone === 'green';
-
 	return (
 		<Link
 			to={to}
 			className={cn(
-				'group relative flex min-h-28 items-center gap-4 overflow-hidden rounded-xl border p-4 text-left',
+				'group relative flex min-h-28 w-full max-w-sm items-center gap-4 overflow-hidden rounded-xl border p-4 text-left',
 				'transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2',
-				isGreen
-					? 'border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 via-background to-background focus-visible:ring-emerald-500/50'
-					: 'border-violet-500/20 bg-gradient-to-br from-violet-500/10 via-background to-background focus-visible:ring-violet-500/50',
+				'border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 via-background to-background focus-visible:ring-emerald-500/50',
 			)}
 		>
-			<div
-				className={cn(
-					'absolute -right-8 -top-8 size-24 rounded-full blur-2xl transition-opacity group-hover:opacity-100',
-					isGreen ? 'bg-emerald-500/15' : 'bg-violet-500/15',
-				)}
-			/>
-			<div
-				className={cn(
-					'relative flex size-11 shrink-0 items-center justify-center rounded-xl',
-					isGreen
-						? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'
-						: 'bg-violet-500/15 text-violet-600 dark:text-violet-300',
-				)}
-			>
+			<div className='absolute -right-8 -top-8 size-24 rounded-full bg-emerald-500/15 blur-2xl transition-opacity group-hover:opacity-100' />
+			<div className='relative flex size-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'>
 				{icon}
 			</div>
 			<div className='relative min-w-0 flex-1'>
-				<span
-					className={cn(
-						'mb-1 block text-[10px] font-semibold uppercase tracking-wider',
-						isGreen ? 'text-emerald-600 dark:text-emerald-300' : 'text-violet-600 dark:text-violet-300',
-					)}
-				>
+				<span className='mb-1 block text-[10px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-300'>
 					{label}
 				</span>
 				<span className='block text-sm font-semibold text-foreground'>{title}</span>

@@ -24,6 +24,7 @@ import { createMcpCallTool } from './mcp-call';
 import { createMcpConnectTool } from './mcp-connect';
 import onboardingCommand from './onboarding-command';
 import onboardingProgress from './onboarding-progress';
+import generateOnboardingRules from './generate-onboarding-rules';
 import read from './read';
 import readQueryResult from './read-query-result';
 import requestWarehouseCredentials from './request-warehouse-credentials';
@@ -55,6 +56,7 @@ export const tools = {
 	onboarding_command: onboardingCommand,
 	onboarding_progress: onboardingProgress,
 	request_warehouse_credentials: requestWarehouseCredentials,
+	generate_onboarding_rules: generateOnboardingRules,
 	read,
 	search,
 	task,
@@ -118,6 +120,7 @@ export const getTools = (
 		onboarding_command: onboardingCommandTool,
 		onboarding_progress: onboardingProgressTool,
 		request_warehouse_credentials: requestWarehouseCredentialsTool,
+		generate_onboarding_rules: generateOnboardingRulesTool,
 		suggest_follow_ups,
 		task: taskTool,
 		write: writeTool,
@@ -139,6 +142,7 @@ export const getTools = (
 			onboarding_command: onboardingCommandTool,
 			onboarding_progress: onboardingProgressTool,
 			request_warehouse_credentials: requestWarehouseCredentialsTool,
+			generate_onboarding_rules: generateOnboardingRulesTool,
 		}),
 		...mcpTools,
 		...(agentSettings?.experimental?.pythonSandboxing && execute_python && { execute_python }),

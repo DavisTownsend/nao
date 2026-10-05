@@ -35,6 +35,20 @@ export interface WarehouseCredentialsFormValues {
 	awsSessionToken: string;
 }
 
+export function getClickHouseDefaultPort(
+	protocol: WarehouseCredentialsFormValues['protocol'],
+	secure: boolean,
+): number {
+	if (protocol === 'native') {
+		return secure ? 9440 : 9000;
+	}
+	return secure ? 8443 : 8123;
+}
+
+export function getTrinoDefaultPort(httpScheme: WarehouseCredentialsFormValues['httpScheme']): number {
+	return httpScheme === 'https' ? 8443 : 8080;
+}
+
 export function getWarehouseCredentialsDefaults(provider: SqlProvider): WarehouseCredentialsFormValues {
 	const settings = SQL_PROVIDER_SETTINGS[provider];
 
@@ -62,11 +76,11 @@ export function getWarehouseCredentialsDefaults(provider: SqlProvider): Warehous
 		location: '',
 		clientId: '',
 		clientSecret: '',
-		authMode: '',
+		authMode: provider === 'fabric' ? 'azure_service_principal' : '',
 		tenantId: '',
 		awsRegion: '',
 		s3StagingDirectory: '',
-		workgroupName: '',
+		workgroupName: provider === 'athena' ? 'primary' : '',
 		awsAccessKeyId: '',
 		awsSecretAccessKey: '',
 		awsSessionToken: '',
@@ -86,7 +100,7 @@ export function buildWarehouseCredentials(
 			return {
 				regionName: values.awsRegion,
 				s3StagingDir: values.s3StagingDirectory,
-				workGroup: values.workgroupName,
+				workGroup: values.workgroupName || undefined,
 				schemaName: database,
 				awsAccessKeyId: values.awsAccessKeyId,
 				awsSecretAccessKey: values.awsSecretAccessKey,
@@ -124,13 +138,13 @@ export function buildWarehouseCredentials(
 				database: values.database,
 				clientId: values.clientId,
 				clientSecret: values.clientSecret,
-				authMode: values.authMode,
-				tenantId: values.tenantId,
+				authMode: 'azure_service_principal',
+				tenantId: values.tenantId || undefined,
 			};
 		case 'motherduck':
 			return {
 				database,
-				accessToken: values.accessToken,
+				token: values.accessToken || undefined,
 			};
 		case 'mssql':
 			return {
@@ -140,7 +154,7 @@ export function buildWarehouseCredentials(
 				database,
 				password: values.password,
 				schemaName,
-				driver: values.driver,
+				driver: values.driver || undefined,
 			};
 		case 'mysql':
 		case 'postgres':
@@ -168,7 +182,7 @@ export function buildWarehouseCredentials(
 				database,
 				password: values.password,
 				schemaName,
-				warehouse: values.warehouse,
+				warehouse: values.warehouse || undefined,
 				accountId: values.accountId,
 				username: values.user,
 			};

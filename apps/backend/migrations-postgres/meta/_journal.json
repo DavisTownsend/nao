@@ -463,6 +463,20 @@
       "when": 1790339890119,
       "tag": "0065_add_warehouse_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1791200779399,
+      "tag": "0066_add_warehouse_provisioning_job",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1791204207412,
+      "tag": "0067_limit_active_warehouse_provisioning",
+      "breakpoints": true
     }
   ]
 }

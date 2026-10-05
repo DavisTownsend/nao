@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Folder, GitFork, Globe, Info, TimerIcon, Upload } from 'lucide-react';
+import { ArrowRight, MessageCircle, Folder, GitFork, Globe, Info, TimerIcon, Upload } from 'lucide-react';
 import type { ForkMetadata, UIMessage } from '@nao/backend/chat';
 import type { SelectionData } from '@/components/highlight-bubble';
 import { NEW_CHAT_ID } from '@/lib/ai';
@@ -32,6 +32,8 @@ import { SelectionProvider } from '@/contexts/text-selection';
 import { chatPendingCitationStore } from '@/stores/chat-pending-citation';
 import { useSetChatInputCallback } from '@/contexts/set-chat-input-callback';
 import { useTrackViewDuration } from '@/hooks/use-track-view-duration';
+import { getOnboardingChatIdStorage } from '@/hooks/use-agent';
+import { useSession } from '@/lib/auth-client';
 import { getTextOffset } from '@/lib/selection-dom.utils';
 import { findStories } from '@/lib/story.utils';
 import { isForbiddenError, shouldShowChatAccessError } from '@/lib/trpc-error';
@@ -64,6 +66,7 @@ function ChatPage() {
 	const { chatId } = Route.useParams();
 	const { role, canViewChatReplay } = usePermissions();
 	const chat = useChatQuery({ chatId });
+	const { data: session } = useSession();
 	const title = chat.data?.title;
 
 	const isForbidden = chat.isError && isForbiddenError(chat.error);
@@ -82,12 +85,22 @@ function ChatPage() {
 		}
 	}, [shouldRedirectToReplay, chatId, router]);
 
+	useEffect(() => {
+		if (!chat.data?.isOnboarding || !session?.user.id) {
+			return;
+		}
+		getOnboardingChatIdStorage(session.user.id).set(chatId);
+		router.navigate({ to: '/onboarding', replace: true });
+	}, [chat.data?.isOnboarding, chatId, router, session?.user.id]);
+
 	const shareQuery = useQuery({
 		...trpc.sharedChat.getShareOptionsByChatId.queryOptions({ chatId }),
 		enabled: !!chat.data && !shouldShowChatError,
 	});
 	const isShared = !!shareQuery.data?.shareId;
+	const currentProject = useQuery(trpc.project.getCurrent.queryOptions());
 	const projects = useQuery(trpc.project.listForCurrentUser.queryOptions());
+	const showTrialOnboardingBanner = currentProject.isSuccess && currentProject.data === null;
 	const isInMultipleProjects = (projects.data?.length ?? 0) > 1;
 	const chatProject = isInMultipleProjects ? projects.data?.find((p) => p.id === chat.data?.projectId) : undefined;
 
@@ -142,6 +155,9 @@ function ChatPage() {
 			return null;
 		}
 		return <ChatAccessError error={chat.error} onRetry={() => chat.refetch()} chatId={chatId} />;
+	}
+	if (chat.data?.isOnboarding) {
+		return null;
 	}
 
 	return (
@@ -270,6 +286,7 @@ function ChatPage() {
 								ref={inputAreaRef}
 								className='pointer-events-auto bg-gradient-to-t from-background via-background via-70% to-transparent'
 							>
+								{showTrialOnboardingBanner && <TrialOnboardingBanner />}
 								<ChatInput />
 							</div>
 						</div>
@@ -295,6 +312,33 @@ function ChatPage() {
 				chatId={chatId}
 			/>
 		</SidePanelProvider>
+	);
+}
+
+function TrialOnboardingBanner() {
+	return (
+		<div className='mx-auto w-full max-w-3xl px-3 md:px-4'>
+			<div className='group relative mb-2 flex items-center gap-1 overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 via-background to-background px-4 py-3 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md sm:flex-row sm:items-center sm:justify-between'>
+				<div className='pointer-events-none absolute -right-8 -top-8 size-24 rounded-full bg-emerald-500/15 blur-2xl transition-opacity group-hover:opacity-100' />
+				<div className='relative flex size-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'>
+					<MessageCircle className='size-4' />
+				</div>
+				<p className='relative min-w-0 flex-1 truncate text-sm font-medium text-foreground'>
+					Ready to use your own data?
+				</p>
+				<Button
+					asChild
+					variant='primary-gradient'
+					size='sm'
+					className='relative shrink-0 rounded-full bg-emerald-600 text-white hover:bg-emerald-700'
+				>
+					<Link to='/onboarding'>
+						Set up your nao project
+						<ArrowRight className='size-3.5' />
+					</Link>
+				</Button>
+			</div>
+		</div>
 	);
 }
 

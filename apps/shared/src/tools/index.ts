@@ -22,3 +22,4 @@ export * as story from './story';
 export * as suggestFollowUps from './suggest-follow-ups';
 export * as task from './task';
 export * as writeFile from './write';
+export * as generateOnboardingRules from './generate-onboarding-rules';

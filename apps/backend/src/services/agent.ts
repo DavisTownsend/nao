@@ -158,6 +158,7 @@ export const onboardingAgentTools: AgentToolsResolver = ({ chat, agentSettings }
 				'onboarding_command',
 				'onboarding_progress',
 				'request_warehouse_credentials',
+				'generate_onboarding_rules',
 			],
 		},
 	);

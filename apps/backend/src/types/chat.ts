@@ -29,6 +29,7 @@ export interface UIChat {
 	projectId: string;
 	title: string;
 	isStarred: boolean;
+	isOnboarding?: boolean;
 	createdAt: number;
 	updatedAt: number;
 	messages: UIMessage[];
@@ -58,6 +59,7 @@ export const MESSAGE_SOURCES = [
 	'mcp',
 	'contextRecommendations',
 	'admin',
+	'onboarding',
 ] as const;
 
 export type MessageSource = (typeof MESSAGE_SOURCES)[number];

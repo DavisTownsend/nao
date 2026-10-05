@@ -22,9 +22,12 @@ import {
 import { AgentProvider, useAgentContext, useAgentMessages } from '@/contexts/agent.provider';
 import { SetChatInputCallbackProvider } from '@/contexts/set-chat-input-callback';
 import { StoryBeforeAgentSendProvider } from '@/contexts/story-before-agent-send';
+import { getOnboardingChatIdStorage } from '@/hooks/use-agent';
+import { ChatIdContext } from '@/hooks/use-chat-id';
 import { useHeight } from '@/hooks/use-height';
 import { usePermissions } from '@/hooks/use-permissions';
 import { setActiveProjectId } from '@/lib/active-project';
+import { useSession } from '@/lib/auth-client';
 import { trpc } from '@/main';
 
 export const Route = createFileRoute('/_sidebar-layout/onboarding')({
@@ -35,14 +38,18 @@ export const Route = createFileRoute('/_sidebar-layout/onboarding')({
 });
 
 function OnboardingRoute() {
+	const { data: session } = useSession();
+	const chatId = session?.user.id ? (getOnboardingChatIdStorage(session.user.id).get() ?? undefined) : undefined;
 	return (
-		<SetChatInputCallbackProvider>
-			<StoryBeforeAgentSendProvider>
-				<AgentProvider disableNavigation mode='onboarding'>
-					<OnboardingPage />
-				</AgentProvider>
-			</StoryBeforeAgentSendProvider>
-		</SetChatInputCallbackProvider>
+		<ChatIdContext.Provider value={chatId}>
+			<SetChatInputCallbackProvider>
+				<StoryBeforeAgentSendProvider>
+					<AgentProvider disableNavigation mode='onboarding'>
+						<OnboardingPage />
+					</AgentProvider>
+				</StoryBeforeAgentSendProvider>
+			</SetChatInputCallbackProvider>
+		</ChatIdContext.Provider>
 	);
 }
 
@@ -51,6 +58,7 @@ function OnboardingPage() {
 	const { isRunning, queueOrSendMessage } = useAgentContext();
 	const progress = useOnboardingProgress();
 	const { isOrgAdmin } = usePermissions();
+	const { data: session } = useSession();
 	const queryClient = useQueryClient();
 	const search = Route.useSearch();
 	const inputAreaRef = useRef<HTMLDivElement>(null);
@@ -93,9 +101,11 @@ function OnboardingPage() {
 	}, [githubStatus.data?.connected, progress?.flow, progress?.step, queueOrSendMessage]);
 
 	useEffect(() => {
-		if (progress?.step !== 4) {
+		if (progress?.step !== 4 || !session?.user.id) {
 			return;
 		}
+
+		getOnboardingChatIdStorage(session.user.id).set(null);
 
 		const refreshProjects = async () => {
 			await queryClient.invalidateQueries({ queryKey: trpc.project.getCurrent.queryKey() });
@@ -109,7 +119,7 @@ function OnboardingPage() {
 		};
 
 		refreshProjects().catch(console.error);
-	}, [progress?.step, queryClient]);
+	}, [progress?.step, queryClient, session?.user.id]);
 
 	const alignDeployDialog = () => {
 		const rect = actionAreaRef.current?.getBoundingClientRect();
@@ -162,7 +172,10 @@ function OnboardingPage() {
 									</div>
 								</div>
 								<DialogTrigger asChild>
-									<Button onClick={alignDeployDialog}>
+									<Button
+										onClick={alignDeployDialog}
+										className='bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500'
+									>
 										{isOrgAdmin ? 'Generate deploy key' : 'Deployment key required'}
 									</Button>
 								</DialogTrigger>

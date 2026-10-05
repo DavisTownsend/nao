@@ -336,5 +336,10 @@ def test_prepare_warehouse_endpoint_redacts_invalid_credentials():
     )
 
     assert response.status_code == 422
-    assert response.json() == {"detail": "Invalid warehouse credentials"}
+    assert response.json() == {
+        "detail": {
+            "code": "invalid_warehouse_credentials",
+            "fields": ["host"],
+        }
+    }
     assert password not in response.text

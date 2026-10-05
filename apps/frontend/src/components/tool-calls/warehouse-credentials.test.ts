@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildWarehouseCredentials, getWarehouseCredentialsDefaults } from './warehouse-credentials';
+import {
+	buildWarehouseCredentials,
+	getClickHouseDefaultPort,
+	getTrinoDefaultPort,
+	getWarehouseCredentialsDefaults,
+} from './warehouse-credentials';
 import type { WarehouseCredentialsFormValues } from './warehouse-credentials';
 import type { SqlProvider } from './warehouse-provider-config';
 
@@ -93,7 +98,7 @@ const providerCases: Array<{
 			database: 'analytics',
 			clientId: 'client-id',
 			clientSecret: 'client-secret',
-			authMode: 'sql_password',
+			authMode: 'azure_service_principal',
 			tenantId: 'tenant-id',
 		},
 	},
@@ -101,7 +106,7 @@ const providerCases: Array<{
 		provider: 'motherduck',
 		expected: {
 			database: 'analytics',
-			accessToken: 'token',
+			token: 'token',
 		},
 	},
 	{
@@ -199,10 +204,16 @@ describe('buildWarehouseCredentials', () => {
 		expect(JSON.parse(JSON.stringify(credentials))).toEqual({
 			regionName: '',
 			s3StagingDir: '',
-			workGroup: '',
+			workGroup: 'primary',
 			awsAccessKeyId: '',
 			awsSecretAccessKey: '',
 		});
+	});
+
+	it('omits empty optional MotherDuck values over the wire', () => {
+		const credentials = buildWarehouseCredentials('motherduck', getWarehouseCredentialsDefaults('motherduck'));
+
+		expect(JSON.parse(JSON.stringify(credentials))).toEqual({});
 	});
 
 	it('omits empty optional Trino values over the wire', () => {
@@ -214,5 +225,30 @@ describe('buildWarehouseCredentials', () => {
 			user: '',
 			httpScheme: 'http',
 		});
+	});
+
+	it('uses service principal authentication for Fabric cloud connections', () => {
+		expect(getWarehouseCredentialsDefaults('fabric').authMode).toBe('azure_service_principal');
+		expect(buildWarehouseCredentials('fabric', values)).toMatchObject({
+			authMode: 'azure_service_principal',
+		});
+	});
+});
+
+describe('warehouse port defaults', () => {
+	it.each([
+		['http', false, 8123],
+		['http', true, 8443],
+		['native', false, 9000],
+		['native', true, 9440],
+	] as const)('uses ClickHouse %s secure=%s port %s', (protocol, secure, expected) => {
+		expect(getClickHouseDefaultPort(protocol, secure)).toBe(expected);
+	});
+
+	it.each([
+		['http', 8080],
+		['https', 8443],
+	] as const)('uses Trino %s port %s', (httpScheme, expected) => {
+		expect(getTrinoDefaultPort(httpScheme)).toBe(expected);
 	});
 });

@@ -421,7 +421,7 @@ function ChatInputBase({
 						isDragging && 'ring-2 ring-primary/50 border-primary',
 						isAdminMode && 'ring-4 ring-amber-500/60',
 						variant === 'example' && 'ring-4 ring-blue-500/60',
-						variant === 'onboarding' && 'ring-4 ring-emerald-500/60',
+						variant === 'onboarding' && 'ring-4 ring-foreground/10',
 					)}
 				>
 					{!isAdminMode && variant === 'default' && <ChatInputAnimatedBorder />}
@@ -641,7 +641,7 @@ function ChatInputExampleBadge() {
 function ChatInputOnboardingBadge() {
 	return (
 		<div className='flex justify-end pr-4'>
-			<span className='mb-1 flex w-fit items-center rounded-t-lg bg-emerald-500/60 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300'>
+			<span className='mb-1 flex w-fit items-center rounded-t-lg bg-foreground/10 px-2 py-0.5 text-[10px] font-medium text-muted-foreground'>
 				Onboarding
 			</span>
 		</div>

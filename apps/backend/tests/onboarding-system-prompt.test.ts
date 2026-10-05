@@ -3,11 +3,47 @@ import { describe, expect, it } from 'vitest';
 import { renderOnboardingSystemPrompt } from '../src/components/ai/onboarding-system-prompt';
 
 describe('onboarding system prompt', () => {
+	it('treats the first message as the answer to the frontend flow selection', () => {
+		const prompt = renderOnboardingSystemPrompt();
+
+		expect(prompt).toContain('Treat the first user message as their answer to that question');
+		expect(prompt).toContain('Do not ask it again');
+		expect(prompt).not.toContain('Start off all conversations with a clarification');
+	});
+
+	it('offers popular databases first and handles unsupported providers', () => {
+		const prompt = renderOnboardingSystemPrompt();
+
+		expect(prompt).toContain('- Options: "BigQuery", "DuckDB", "Postgres", "Snowflake", "Other"');
+		expect(prompt).toContain('Respond exactly: "Please tell me which database you are using."');
+		expect(prompt).toContain('Do not call clarification or any other tool');
+		expect(prompt).toContain('Do not invent or guess a provider identifier');
+		expect(prompt).toContain('Do not call request_warehouse_credentials');
+	});
+
 	it('routes cloud DuckDB connections through private MotherDuck credentials', () => {
 		const prompt = renderOnboardingSystemPrompt();
 
 		expect(prompt).toContain('treat the selected database provider as "motherduck"');
 		expect(prompt).toContain('Do not continue the database connection flow');
 		expect(prompt).not.toContain('make their DuckDB file public');
+	});
+
+	it('collects optional business context in one open-ended question', () => {
+		const prompt = renderOnboardingSystemPrompt();
+
+		expect(prompt).toContain('warehouse synchronization is continuing in the background');
+		expect(prompt).toContain('write one or two sentences, paste a link to your company website, or reply Skip');
+		expect(prompt).toContain('"additionalContext": "<their complete answer>"');
+		expect(prompt).toContain('If they reply Skip, use an empty "businessContext" object');
+		expect(prompt).not.toContain('companyDescription');
+	});
+
+	it('ends the agent turn while project finalization continues in the background', () => {
+		const prompt = renderOnboardingSystemPrompt();
+
+		expect(prompt).toContain('finalizing the connection in the background');
+		expect(prompt).toContain('End the turn and wait');
+		expect(prompt).toContain('Do not claim that onboarding is complete');
 	});
 });

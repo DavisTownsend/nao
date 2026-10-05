@@ -18,6 +18,9 @@ export const agentRoutes = async (app: App) => {
 		const { user, project, body, headers } = request;
 
 		const isOnboarding = body.mode === 'onboarding';
+		if (!isOnboarding && body.chatId && (await chatQueries.isOnboardingChat(body.chatId))) {
+			return reply.status(403).send({ error: 'Onboarding conversations must be continued through onboarding' });
+		}
 
 		const onboardingProject = isOnboarding ? await projectQueries.getProjectById(SYSTEM_EXAMPLE_PROJECT_ID) : null;
 
@@ -63,7 +66,7 @@ export const agentRoutes = async (app: App) => {
 			chat_id: result.chatId,
 			model_id: result.modelId,
 			is_new_chat: result.isNewChat,
-			source: body.adminMode && canChatWithNaoData ? 'admin' : 'web',
+			source: isOnboarding ? 'onboarding' : body.adminMode && canChatWithNaoData ? 'admin' : 'web',
 			domain_host: headers['x-forwarded-host'] || headers.host,
 		});
 

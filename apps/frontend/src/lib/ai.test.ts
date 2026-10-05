@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { areGroupedMessagePartsEqual, isFreeMessagesExhaustedError } from './ai';
+import {
+	areGroupedMessagePartsEqual,
+	isOnboardingContextRequestMessage,
+	ONBOARDING_CONTEXT_REQUEST_PREFIX,
+} from './ai';
+import type { UIMessage } from '@nao/backend/chat';
 import type { GroupedMessagePart } from '@/types/ai';
 
 const createToolPart = (overrides: Record<string, unknown> = {}): GroupedMessagePart =>
@@ -130,21 +135,14 @@ describe('areGroupedMessagePartsEqual', () => {
 	});
 });
 
-describe('isFreeMessagesExhaustedError', () => {
-	it('recognizes the structured agent error', () => {
-		const error = new Error(
-			JSON.stringify({
-				error: {
-					code: 'FREE_MESSAGES_EXHAUSTED',
-					message: 'You have used all 5 free example messages',
-				},
-			}),
-		);
+describe('isOnboardingContextRequestMessage', () => {
+	it('recognizes only internal onboarding context requests', () => {
+		const message = {
+			role: 'user',
+			parts: [{ type: 'text', text: `${ONBOARDING_CONTEXT_REQUEST_PREFIX} jobId=test` }],
+		} as UIMessage;
 
-		expect(isFreeMessagesExhaustedError(error)).toBe(true);
-	});
-
-	it('ignores unrelated errors', () => {
-		expect(isFreeMessagesExhaustedError(new Error('Connection failed'))).toBe(false);
+		expect(isOnboardingContextRequestMessage(message)).toBe(true);
+		expect(isOnboardingContextRequestMessage({ ...message, role: 'assistant' })).toBe(false);
 	});
 });

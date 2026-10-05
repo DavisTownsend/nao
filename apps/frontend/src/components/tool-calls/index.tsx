@@ -8,6 +8,7 @@ import { ExecutePythonToolCall } from './execute-python';
 import { ExecuteSandboxedCodeToolCall } from './execute-sandboxed-code';
 import { ExecuteSemanticQueryToolCall } from './execute-semantic-query';
 import { ExecuteSqlToolCall } from './execute-sql';
+import { GenerateOnboardingRulesToolCall } from './generate-onboarding-rules';
 import { GrepToolCall } from './grep';
 import { ListToolCall } from './list';
 import { McpToolCall } from './mcp';
@@ -42,6 +43,7 @@ const toolComponents: Partial<{
 	execute_sandboxed_code: ExecuteSandboxedCodeToolCall,
 	execute_sql: ExecuteSqlToolCall,
 	execute_semantic_query: ExecuteSemanticQueryToolCall,
+	generate_onboarding_rules: GenerateOnboardingRulesToolCall,
 	grep: GrepToolCall,
 	list: ListToolCall,
 	onboarding_command: OnboardingCommandToolCall,

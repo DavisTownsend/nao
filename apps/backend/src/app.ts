@@ -64,6 +64,7 @@ import { posthog, PostHogEvent } from './services/posthog';
 import { ensureRecurring, registerJob, startScheduler } from './services/scheduler.service';
 import { slackService } from './services/slack';
 import { seedSlackConfigFromEnv } from './services/slack-env-seed';
+import { startWarehouseProvisioningReconciler } from './services/warehouse-provisioning';
 import { TrpcRouter, trpcRouter } from './trpc/router';
 import { createContext } from './trpc/trpc';
 import { BudgetExceededError, HandlerError } from './utils/error';
@@ -429,6 +430,7 @@ export const startServer = async (opts: { port: number; host: string }) => {
 
 	const address = await app.listen({ host: opts.host, port: opts.port });
 	app.log.info(`Server is running on ${address}`);
+	startWarehouseProvisioningReconciler();
 
 	void pingLicensesServer();
 	void seedSlackConfigFromEnv().then(() => slackService.startSocketModeForAllProjects());

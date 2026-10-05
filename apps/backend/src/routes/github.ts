@@ -76,10 +76,7 @@ export const githubRoutes = async (app: App) => {
 };
 
 function normalizeReturnTo(value: unknown): string {
-	if (
-		typeof value !== 'string' ||
-		(!value.startsWith('/settings/') && value !== '/setup-github-project' && value !== '/onboarding')
-	) {
+	if (typeof value !== 'string' || (!value.startsWith('/settings/') && value !== '/onboarding')) {
 		return '/settings/organization';
 	}
 	return value.split('?', 1)[0];
