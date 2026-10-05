@@ -60,6 +60,7 @@ import {
 	createCloudPaymentMethodSession,
 	createCloudPortalSession,
 	createCloudResubscribeSession,
+	findCloudSubscription,
 	getCloudBillingPlans,
 	getCloudMonthlyPrice,
 	getCloudUpcomingInvoice,
@@ -84,7 +85,7 @@ beforeEach(() => {
 	__resetStripeForTesting();
 	vi.clearAllMocks();
 	stripeMocks.listPrices.mockResolvedValue({ data: [cloudMonthlyPrice()] });
-	stripeMocks.listCheckoutSessions.mockResolvedValue({ data: [] });
+	stripeMocks.listCheckoutSessions.mockReturnValue(checkoutSessionList([]));
 	stripeMocks.listSubscriptions.mockReturnValue(subscriptionList([]));
 	stripeMocks.retrieveCustomer.mockResolvedValue({
 		deleted: false,
@@ -238,8 +239,8 @@ describe('cloud Checkout', () => {
 	});
 
 	it('replaces an open Checkout Session that does not accept promotion codes', async () => {
-		stripeMocks.listCheckoutSessions.mockResolvedValueOnce({
-			data: [
+		stripeMocks.listCheckoutSessions.mockReturnValueOnce(
+			checkoutSessionList([
 				{
 					mode: 'subscription',
 					allow_promotion_codes: false,
@@ -250,8 +251,8 @@ describe('cloud Checkout', () => {
 						nao_checkout_kind: 'initial',
 					},
 				},
-			],
-		});
+			]),
+		);
 		stripeMocks.createCheckoutSession.mockResolvedValue({
 			url: 'https://checkout.stripe.com/promotion-codes',
 		});
@@ -270,9 +271,60 @@ describe('cloud Checkout', () => {
 		);
 	});
 
+	it('reuses a matching open Checkout Session after the first page', async () => {
+		const firstPage = Array.from({ length: 100 }, (_, index) => ({
+			id: `cs_unrelated_${index}`,
+			mode: 'payment' as const,
+		}));
+		const existingSession = {
+			id: 'cs_existing',
+			mode: 'subscription' as const,
+			allow_promotion_codes: true,
+			custom_text: {
+				submit: {
+					message:
+						'Nothing is charged today. Your 14-day free trial starts when you confirm. The recurring price shown, including any promotion code discount, starts after the trial.',
+				},
+			},
+			metadata: {
+				nao_org_id: 'org-id',
+				nao_plan_key: 'cloud_monthly_v2',
+				nao_checkout_kind: 'initial',
+			},
+			url: 'https://checkout.stripe.com/existing',
+		};
+		stripeMocks.listCheckoutSessions.mockImplementation((params: Stripe.Checkout.SessionListParams) => {
+			if (params.starting_after) {
+				return checkoutSessionList([existingSession]);
+			}
+			return checkoutSessionList(firstPage, () =>
+				stripeMocks.listCheckoutSessions({
+					...params,
+					starting_after: firstPage.at(-1)?.id,
+				}),
+			);
+		});
+
+		await expect(
+			createCloudCheckoutSession({
+				organizationId: 'org-id',
+				stripeCustomerId: 'cus_cloud',
+				trialDays: 14,
+			}),
+		).resolves.toBe('https://checkout.stripe.com/existing');
+
+		expect(stripeMocks.createCheckoutSession).not.toHaveBeenCalled();
+		expect(stripeMocks.listCheckoutSessions).toHaveBeenNthCalledWith(2, {
+			customer: 'cus_cloud',
+			limit: 100,
+			starting_after: 'cs_unrelated_99',
+			status: 'open',
+		});
+	});
+
 	it('creates a new Checkout after the previous Session was expired', async () => {
-		stripeMocks.listCheckoutSessions.mockResolvedValueOnce({ data: [] }).mockResolvedValueOnce({
-			data: [
+		stripeMocks.listCheckoutSessions.mockReturnValueOnce(checkoutSessionList([])).mockReturnValueOnce(
+			checkoutSessionList([
 				{
 					id: 'cs_expired',
 					mode: 'subscription',
@@ -289,8 +341,8 @@ describe('cloud Checkout', () => {
 						nao_checkout_kind: 'initial',
 					},
 				},
-			],
-		});
+			]),
+		);
 		stripeMocks.createCheckoutSession.mockResolvedValue({
 			url: 'https://checkout.stripe.com/replacement',
 		});
@@ -340,6 +392,16 @@ describe('cloud Checkout', () => {
 		stripeMocks.listSubscriptions.mockReturnValue(subscriptionList([subscription]));
 
 		await expect(listCloudSubscriptions('cus_cloud')).resolves.toEqual([subscription]);
+	});
+
+	it('finds only subscriptions on the configured cloud Product', async () => {
+		const cloud = cloudSubscription();
+		const unrelated = cloudSubscription({ id: 'sub_unrelated' });
+		unrelated.items.data[0].price = cloudMonthlyPrice({ product: 'prod_unrelated' });
+		stripeMocks.retrieveSubscription.mockResolvedValueOnce(cloud).mockResolvedValueOnce(unrelated);
+
+		await expect(findCloudSubscription('sub_cloud')).resolves.toBe(cloud);
+		await expect(findCloudSubscription('sub_unrelated')).resolves.toBeNull();
 	});
 
 	it('creates a paid Checkout Session after a canceled subscription without another trial', async () => {
@@ -477,6 +539,13 @@ describe('cloud Checkout', () => {
 });
 
 describe('cloud subscription projection', () => {
+	it('rejects a non-monthly Price on the cloud Product', async () => {
+		const subscription = cloudSubscription();
+		subscription.items.data[0].price = cloudMonthlyPrice({ recurring: recurring({ interval: 'year' }) });
+
+		await expect(cloudSubscriptionProjection(subscription)).rejects.toThrow('has no cloud plan item');
+	});
+
 	it('projects a future cancel_at as a scheduled cancellation', async () => {
 		const cancellationEndsAt = 1_799_500_000;
 
@@ -796,6 +865,21 @@ function subscriptionList(
 		data: subscriptions,
 		async *[Symbol.asyncIterator]() {
 			yield* subscriptions;
+			if (nextPage) {
+				yield* nextPage();
+			}
+		},
+	};
+}
+
+function checkoutSessionList(
+	sessions: Array<Partial<Stripe.Checkout.Session>>,
+	nextPage?: () => AsyncIterable<Partial<Stripe.Checkout.Session>>,
+) {
+	return {
+		data: sessions,
+		async *[Symbol.asyncIterator]() {
+			yield* sessions;
 			if (nextPage) {
 				yield* nextPage();
 			}

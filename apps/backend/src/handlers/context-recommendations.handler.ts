@@ -32,7 +32,7 @@ export const contextRecommendationsHandler: JobHandler<ContextRecommendationsJob
 		);
 		return;
 	}
-	await runContextRecommendations(payload.projectId);
+	await runContextRecommendations(payload.projectId, { billingAccessVerifiedProjectId: payload.projectId });
 };
 
 /**

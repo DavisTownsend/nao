@@ -1,4 +1,4 @@
-import { and, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, eq, lte, sql } from 'drizzle-orm';
 
 import s, { type DBScheduledJob, type NewScheduledJob } from '../db/abstractSchema';
 import { db } from '../db/db';
@@ -137,25 +137,11 @@ export const enqueueOnceJob = async (input: EnqueueOnceInput): Promise<DBSchedul
  * the UPDATE prevents two workers from claiming the same row. Cheaper than
  * `FOR UPDATE SKIP LOCKED` and works identically on SQLite and Postgres.
  */
-export const claimDueJobs = async (
-	now: Date,
-	limit: number,
-	lockedBy: string,
-	registeredNames: string[],
-): Promise<DBScheduledJob[]> => {
-	if (registeredNames.length === 0) {
-		return [];
-	}
+export const claimDueJobs = async (now: Date, limit: number, lockedBy: string): Promise<DBScheduledJob[]> => {
 	const candidates = await db
 		.select({ id: s.scheduledJob.id, name: s.scheduledJob.name })
 		.from(s.scheduledJob)
-		.where(
-			and(
-				eq(s.scheduledJob.status, 'pending'),
-				lte(s.scheduledJob.runAt, now),
-				inArray(s.scheduledJob.name, registeredNames),
-			),
-		)
+		.where(and(eq(s.scheduledJob.status, 'pending'), lte(s.scheduledJob.runAt, now)))
 		.orderBy(s.scheduledJob.runAt)
 		.limit(limit)
 		.execute();

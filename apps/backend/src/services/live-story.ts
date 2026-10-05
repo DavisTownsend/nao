@@ -57,8 +57,16 @@ export interface RefreshResult {
 	queryData: StoryQueryData;
 }
 
-export async function refreshStoryData(chatId: string, slug: string): Promise<RefreshResult> {
-	const { queryData } = await refreshStoryDataWithContext(chatId, slug);
+interface StoryRefreshOptions {
+	billingAccessVerifiedProjectId?: string;
+}
+
+export async function refreshStoryData(
+	chatId: string,
+	slug: string,
+	options: StoryRefreshOptions = {},
+): Promise<RefreshResult> {
+	const { queryData } = await refreshStoryDataWithContext(chatId, slug, undefined, options);
 	return { queryData };
 }
 
@@ -66,6 +74,7 @@ async function refreshStoryDataWithContext(
 	chatId: string,
 	slug: string,
 	existingExecutionContext?: StoryExecutionContext,
+	options: StoryRefreshOptions = {},
 ): Promise<RefreshResult & { code: string }> {
 	const version = await storyQueries.getLatestVersionByChatAndSlug(chatId, slug);
 	if (!version) {
@@ -86,6 +95,7 @@ async function refreshStoryDataWithContext(
 		renderSql: stripSqlFilterBlocks,
 		executionContext: existingExecutionContext,
 		projectId: chat.projectId,
+		billingAccessVerifiedProjectId: options.billingAccessVerifiedProjectId,
 	});
 
 	let refreshedCode = version.code;
@@ -200,6 +210,7 @@ interface StoryQueryExecutionOptions {
 	renderSql: (sqlQuery: string) => string;
 	executionContext?: StoryExecutionContext;
 	projectId?: string;
+	billingAccessVerifiedProjectId?: string;
 }
 
 /**
@@ -212,13 +223,15 @@ export async function executeStoryQueries(
 	sqlQueries: StorySqlQueries,
 	options: StoryQueryExecutionOptions,
 ): Promise<StoryQueryData> {
+	const projectId =
+		options.executionContext?.toolContext.projectId ?? options.projectId ?? (await requireChatProjectId(chatId));
+	if (options.billingAccessVerifiedProjectId !== projectId) {
+		await assertProjectCloudBillingAccess(projectId);
+	}
 	const queries = { ...(await loadUpstreamQueries(chatId, sqlQueries)), ...sqlQueries };
 	const executionContext = Object.values(queries).some((query) => !query.adminMode)
 		? (options.executionContext ?? (await createStoryExecutionContext(chatId)))
 		: null;
-	const projectId =
-		executionContext?.toolContext.projectId ?? options.projectId ?? (await requireChatProjectId(chatId));
-	await assertProjectCloudBillingAccess(projectId);
 	const running = new Map<string, Promise<QueryResult>>();
 
 	const run = (queryId: string, ancestors: Set<string>): Promise<QueryResult> => {

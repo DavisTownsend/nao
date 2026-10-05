@@ -68,7 +68,9 @@ async function runLockedScheduledStoryRefresh(storyId: string): Promise<void> {
 	});
 
 	try {
-		const { queryData } = await refreshStoryData(story.chatId, story.slug);
+		const { queryData } = await refreshStoryData(story.chatId, story.slug, {
+			billingAccessVerifiedProjectId: projectId,
+		});
 		const queriesRefreshed = Object.keys(queryData).length;
 		await activityQueries.completeActivity(activity.id, { queriesRefreshed });
 		await notifyStoryRefreshed({

@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { env, isCloudBillingEnabled } from '../env';
 import type { SubscriptionProjection } from '../queries/billing.queries';
 import {
+	BILLING_STATUSES,
 	type BillingStatus,
 	CLOUD_MONTHLY_PLAN,
 	type CloudBillingPlan,
@@ -122,23 +123,11 @@ async function createSubscriptionCheckoutSession(input: {
 		session.metadata?.[PLAN_METADATA_KEY] === CLOUD_MONTHLY_PLAN.key &&
 		session.metadata?.[CHECKOUT_KIND_METADATA_KEY] === input.kind &&
 		(trialMessage === null || session.custom_text?.submit?.message === trialMessage);
-	const existingSession = (
-		await getStripeClient().checkout.sessions.list({
-			customer: input.stripeCustomerId,
-			status: 'open',
-			limit: 100,
-		})
-	).data.find(matchesCheckout);
+	const existingSession = await findCheckoutSession(input.stripeCustomerId, 'open', matchesCheckout);
 	if (existingSession?.url) {
 		return existingSession.url;
 	}
-	const latestExpiredSession = (
-		await getStripeClient().checkout.sessions.list({
-			customer: input.stripeCustomerId,
-			status: 'expired',
-			limit: 100,
-		})
-	).data.find(matchesCheckout);
+	const latestExpiredSession = await findCheckoutSession(input.stripeCustomerId, 'expired', matchesCheckout);
 
 	const price = await getCloudMonthlyPrice();
 	const billingUrl = billingPageUrl();
@@ -312,11 +301,16 @@ export async function listCloudSubscriptions(stripeCustomerIdValue: string): Pro
 }
 
 export async function getCloudSubscription(stripeSubscriptionId: string): Promise<Stripe.Subscription> {
-	const subscription = await getStripeClient().subscriptions.retrieve(stripeSubscriptionId);
-	if (!hasProduct(subscription, configuredCloudProductId())) {
+	const subscription = await findCloudSubscription(stripeSubscriptionId);
+	if (!subscription) {
 		throw new Error(`Stripe Subscription "${stripeSubscriptionId}" does not use the configured cloud Product`);
 	}
 	return subscription;
+}
+
+export async function findCloudSubscription(stripeSubscriptionId: string): Promise<Stripe.Subscription | null> {
+	const subscription = await getStripeClient().subscriptions.retrieve(stripeSubscriptionId);
+	return hasProduct(subscription, configuredCloudProductId()) ? subscription : null;
 }
 
 export async function getCloudCheckoutSubscription(
@@ -479,6 +473,23 @@ function checkoutTrialMessage(trialDays: number): string {
 	return `Nothing is charged today. Your ${trialDays}-day free trial starts when you confirm. The recurring price shown, including any promotion code discount, starts after the trial.`;
 }
 
+async function findCheckoutSession(
+	stripeCustomerId: string,
+	status: 'open' | 'expired',
+	matches: (session: Stripe.Checkout.Session) => boolean,
+): Promise<Stripe.Checkout.Session | undefined> {
+	for await (const session of getStripeClient().checkout.sessions.list({
+		customer: stripeCustomerId,
+		status,
+		limit: 100,
+	})) {
+		if (matches(session)) {
+			return session;
+		}
+	}
+	return undefined;
+}
+
 function invoicePromotionCodes(invoice: Pick<Stripe.Invoice, 'discounts'>): string[] {
 	return invoice.discounts.flatMap((discount) => {
 		if (
@@ -497,7 +508,11 @@ function hasProduct(subscription: Stripe.Subscription, productId: string): boole
 }
 
 function cloudProductItem(subscription: Stripe.Subscription, productId: string): Stripe.SubscriptionItem | null {
-	return subscription.items.data.find((item) => stripeProductId(item.price.product) === productId) ?? null;
+	return (
+		subscription.items.data.find(
+			(item) => stripeProductId(item.price.product) === productId && isCloudMonthlyPriceDetails(item.price),
+		) ?? null
+	);
 }
 
 function configuredCloudProductId(): string {
@@ -524,16 +539,7 @@ function stripeDate(value: number | null): Date | null {
 }
 
 function isBillingStatus(status: string): status is BillingStatus {
-	return [
-		'trialing',
-		'active',
-		'past_due',
-		'unpaid',
-		'canceled',
-		'paused',
-		'incomplete',
-		'incomplete_expired',
-	].includes(status);
+	return (BILLING_STATUSES as readonly string[]).includes(status);
 }
 
 function isExpectedCloudMonthlyPrice(price: Stripe.Price): price is CloudMonthlyPrice {

@@ -14,15 +14,26 @@ const mocks = vi.hoisted(() => ({
 	clearError: vi.fn(),
 	copy: vi.fn(),
 	error: null as Error | null,
+	hasAccessData: true,
 	openBilling: vi.fn(),
 	queryOptions: vi.fn(),
+	queryState: {
+		isError: false,
+		isFetching: false,
+		isPending: false,
+	},
+	refetchAccess: vi.fn(async () => undefined),
 	resendMessage: vi.fn(async () => undefined),
 }));
 
 vi.mock('@tanstack/react-query', () => ({
 	useQuery: (options: { enabled?: boolean }) => {
 		mocks.queryOptions(options);
-		return { data: options.enabled === false ? undefined : mocks.access };
+		return {
+			data: options.enabled === false || !mocks.hasAccessData ? undefined : mocks.access,
+			...mocks.queryState,
+			refetch: mocks.refetchAccess,
+		};
 	},
 }));
 
@@ -55,6 +66,12 @@ beforeEach(() => {
 		canManageBilling: true,
 		organizationId: 'organization-id',
 		trialAvailable: false,
+	};
+	mocks.hasAccessData = true;
+	mocks.queryState = {
+		isError: false,
+		isFetching: false,
+		isPending: false,
 	};
 	mocks.error = new Error(
 		JSON.stringify({
@@ -91,13 +108,38 @@ it('offers the free trial for an eligible billing access error', () => {
 	expect(screen.getByText('Start your free trial, then retry your message.')).toBeTruthy();
 });
 
-it('directs members to an organization admin without offering billing management', () => {
+it('directs trial-eligible members to an organization admin without offering billing management', () => {
 	mocks.access.canManageBilling = false;
+	mocks.access.trialAvailable = true;
 
 	render(<ChatError />);
 
+	expect(
+		screen.getByText('Ask an organization admin to start the free trial, then retry your message.'),
+	).toBeTruthy();
+	expect(screen.queryByText('Start your free trial, then retry your message.')).toBeNull();
 	expect(screen.getByText('Ask an organization admin to manage billing.')).toBeTruthy();
 	expect(screen.queryByRole('button', { name: 'Manage billing' })).toBeNull();
+});
+
+it('shows billing access loading state while checking who can manage billing', () => {
+	mocks.hasAccessData = false;
+	mocks.queryState.isPending = true;
+
+	render(<ChatError />);
+
+	expect(screen.getByText('Loading billing details...')).toBeTruthy();
+	expect(screen.queryByRole('button', { name: 'Manage billing' })).toBeNull();
+});
+
+it('allows a failed billing access lookup to be retried', () => {
+	mocks.hasAccessData = false;
+	mocks.queryState.isError = true;
+
+	render(<ChatError />);
+
+	fireEvent.click(screen.getByRole('button', { name: 'Retry billing details' }));
+	expect(mocks.refetchAccess).toHaveBeenCalledOnce();
 });
 
 it('shows parsed provider details for a non-billing error without loading billing access', () => {

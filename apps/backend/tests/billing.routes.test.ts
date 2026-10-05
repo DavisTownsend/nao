@@ -109,6 +109,7 @@ describe('billing.getAccess', () => {
 	it('reports an expired trial as restricted', async () => {
 		testState.membership = membership({
 			billingStatus: 'trialing',
+			stripeSubscriptionId: 'sub_trial',
 			trialEndsAt: new Date('2020-10-05T00:00:00.000Z'),
 		});
 
@@ -310,8 +311,18 @@ describe('billing management mutations', () => {
 			stripeSubscriptionId: 'sub_cloud',
 		});
 		vi.clearAllMocks();
+		stripeMocks.createPaymentMethod.mockResolvedValue('https://billing.stripe.com/payment-method');
+		stripeMocks.createPortal.mockResolvedValue('https://billing.stripe.com/session');
 		stripeMocks.createResubscribe.mockResolvedValue('https://checkout.stripe.com/subscription');
 		stripeMocks.resumeSubscription.mockResolvedValue({});
+	});
+
+	it('returns Stripe invoice history', async () => {
+		const invoices = [{ id: 'in_cloud', total: 200_000 }];
+		stripeMocks.listInvoices.mockResolvedValue(invoices);
+
+		await expect(caller().billing.getInvoices()).resolves.toEqual(invoices);
+		expect(stripeService.listCloudInvoices).toHaveBeenCalledWith('cus_cloud');
 	});
 
 	it('rejects invoice history access for non-admin members', async () => {
@@ -361,6 +372,32 @@ describe('billing management mutations', () => {
 
 		await expect(caller().billing.syncStripeBilling()).resolves.toEqual({ synced: false });
 		expect(stripeMocks.reconcileCustomer).not.toHaveBeenCalled();
+	});
+
+	it('opens the Stripe Customer Portal', async () => {
+		const requestId = 'c7cc1630-972f-4e2a-a412-9ef6c0e59ef9';
+
+		await expect(caller().billing.createPortalSession({ requestId })).resolves.toEqual({
+			url: 'https://billing.stripe.com/session',
+		});
+		expect(stripeService.createCloudPortalSession).toHaveBeenCalledWith({
+			organizationId: 'org-id',
+			stripeCustomerId: 'cus_cloud',
+			requestId,
+		});
+	});
+
+	it('opens Stripe payment-method management', async () => {
+		const requestId = 'c7cc1630-972f-4e2a-a412-9ef6c0e59ef9';
+
+		await expect(caller().billing.createPaymentMethodSession({ requestId })).resolves.toEqual({
+			url: 'https://billing.stripe.com/payment-method',
+		});
+		expect(stripeService.createCloudPaymentMethodSession).toHaveBeenCalledWith({
+			organizationId: 'org-id',
+			stripeCustomerId: 'cus_cloud',
+			requestId,
+		});
 	});
 
 	it('starts a paid subscription Checkout only after a terminal subscription', async () => {

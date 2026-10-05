@@ -3,7 +3,7 @@ import type Stripe from 'stripe';
 import * as billingQueries from '../queries/billing.queries';
 import { reconcileCloudBillingCustomer } from '../services/billing-reconciliation.service';
 import type { JobHandler } from '../services/scheduler.service';
-import { getCloudCheckoutSubscription, getCloudSubscription, getStripeEvent } from '../services/stripe.service';
+import { findCloudSubscription, getCloudCheckoutSubscription, getStripeEvent } from '../services/stripe.service';
 import { CLOUD_MONTHLY_PLAN, STRIPE_WEBHOOK_PROCESS_JOB_NAME } from '../types/billing';
 
 export { STRIPE_WEBHOOK_PROCESS_JOB_NAME };
@@ -76,23 +76,34 @@ async function processStripeEvent(event: Stripe.Event): Promise<void> {
 
 	if (SUBSCRIPTION_EVENTS.has(event.type)) {
 		const eventSubscription = event.data.object as Stripe.Subscription;
-		const customerId = stripeId(eventSubscription.customer);
+		const subscription = await findCloudSubscription(eventSubscription.id);
+		if (!subscription) {
+			return;
+		}
 		await reconcileCloudBillingCustomer({
-			stripeCustomerId: customerId,
-			organizationIdHint: eventSubscription.metadata.nao_org_id,
+			stripeCustomerId: stripeId(subscription.customer),
+			organizationIdHint: subscription.metadata.nao_org_id,
 		});
 		return;
 	}
 
 	if (INVOICE_EVENTS.has(event.type)) {
 		const invoice = event.data.object as Stripe.Invoice;
-		const customerId = await invoiceCustomerId(invoice);
-		if (!customerId) {
+		const subscriptionId = invoice.parent?.subscription_details?.subscription;
+		if (!subscriptionId) {
 			return;
+		}
+		const subscription = await findCloudSubscription(stripeId(subscriptionId));
+		if (!subscription) {
+			return;
+		}
+		const customerId = stripeId(subscription.customer);
+		if (invoice.customer && stripeId(invoice.customer) !== customerId) {
+			throw new Error(`Stripe Invoice "${invoice.id}" has an unexpected Customer`);
 		}
 		await reconcileCloudBillingCustomer({
 			stripeCustomerId: customerId,
-			organizationIdHint: invoice.parent?.subscription_details?.metadata?.nao_org_id,
+			organizationIdHint: subscription.metadata.nao_org_id,
 		});
 		return;
 	}
@@ -103,17 +114,6 @@ async function processStripeEvent(event: Stripe.Event): Promise<void> {
 			await reconcileCloudBillingCustomer({ stripeCustomerId: customerId });
 		}
 	}
-}
-
-async function invoiceCustomerId(invoice: Stripe.Invoice): Promise<string | null> {
-	if (invoice.customer) {
-		return stripeId(invoice.customer);
-	}
-	const subscriptionId = invoice.parent?.subscription_details?.subscription;
-	if (!subscriptionId) {
-		return null;
-	}
-	return stripeId((await getCloudSubscription(stripeId(subscriptionId))).customer);
 }
 
 function paymentMethodCustomerId(event: Stripe.Event): string | null {

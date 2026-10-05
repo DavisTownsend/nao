@@ -1,10 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { hasCloudBillingAccess } from '../src/services/cloud-billing-access.service';
-import type { BillingStatus } from '../src/types/billing';
+const mocks = vi.hoisted(() => ({
+	getOrganizationBilling: vi.fn(),
+	getProjectById: vi.fn(),
+	isCloudBillingEnabled: vi.fn(() => true),
+}));
 
-vi.mock('../src/queries/organization.queries', () => ({}));
-vi.mock('../src/queries/project.queries', () => ({}));
+vi.mock('../src/env', () => ({ isCloudBillingEnabled: mocks.isCloudBillingEnabled }));
+vi.mock('../src/queries/billing.queries', () => ({ getOrganizationBilling: mocks.getOrganizationBilling }));
+vi.mock('../src/queries/project.queries', () => ({ getProjectById: mocks.getProjectById }));
+
+import { hasCloudBillingAccess, hasProjectCloudBillingAccess } from '../src/services/cloud-billing-access.service';
+import type { BillingStatus } from '../src/types/billing';
 
 const now = new Date('2026-09-24T12:00:00.000Z');
 const future = new Date('2026-09-25T12:00:00.000Z');
@@ -92,6 +99,17 @@ describe('cloud billing access entitlement', () => {
 		['missing billing state', null, false],
 	] as const)('%s', (_label, state, expected) => {
 		expect(hasCloudBillingAccess(state)).toBe(expected);
+	});
+});
+
+describe('project cloud billing access', () => {
+	it('reports an invalid cloud project instead of treating it as delinquent', async () => {
+		mocks.getProjectById.mockResolvedValue({ orgId: null });
+
+		await expect(hasProjectCloudBillingAccess('orphaned-project')).rejects.toThrow(
+			'Cloud project orphaned-project is not assigned to an organization.',
+		);
+		expect(mocks.getOrganizationBilling).not.toHaveBeenCalled();
 	});
 });
 

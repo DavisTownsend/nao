@@ -3,9 +3,10 @@ import 'katex/dist/katex.min.css';
 import { StrictMode } from 'react';
 import { createTRPCClient, httpBatchLink, loggerLink } from '@trpc/client';
 import { createTRPCOptionsProxy } from '@trpc/tanstack-react-query';
+import { observable } from '@trpc/server/observable';
 import { RouterProvider, createRouter } from '@tanstack/react-router';
 import ReactDOM from 'react-dom/client';
-import { matchQuery, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import superjson from 'superjson';
 import { PostHogProvider } from './contexts/posthog.provider';
 import { ThemeProvider } from './contexts/theme.provider';
@@ -15,6 +16,7 @@ import { clearStaleActiveOrganization, getActiveOrganizationId } from './lib/act
 import { getActiveProjectId } from './lib/active-project';
 import { routeTree } from './routeTree.gen';
 import reportWebVitals from './reportWebVitals';
+import type { TRPCLink } from '@trpc/client';
 import type { TrpcRouter } from '@nao/backend/trpc';
 
 // Register the router instance for type safety
@@ -40,14 +42,6 @@ const router = createRouter({
 
 /** Query client for state management */
 export const queryClient = new QueryClient({
-	queryCache: new QueryCache({
-		onError: (error, query) => {
-			if (matchQuery(trpc.organization.get.queryFilter(), query) && clearStaleActiveOrganization(error)) {
-				void queryClient.invalidateQueries();
-				void router.invalidate();
-			}
-		},
-	}),
 	defaultOptions: {
 		queries: {
 			retry: false,
@@ -56,16 +50,56 @@ export const queryClient = new QueryClient({
 	},
 });
 
+const requestOrganizationIds = new Map<number, string | null>();
+const activeOrganizationLink: TRPCLink<TrpcRouter> = () => {
+	return ({ next, op }) => {
+		return observable((observer) => {
+			const subscription = next(op).subscribe({
+				next(result) {
+					observer.next(result);
+				},
+				error(error) {
+					const organizationId = requestOrganizationIds.get(op.id) ?? null;
+					requestOrganizationIds.delete(op.id);
+					const cleared =
+						op.path === 'organization.get' && clearStaleActiveOrganization(organizationId, error);
+
+					observer.error(error);
+					if (cleared) {
+						queueMicrotask(() => {
+							void queryClient.invalidateQueries();
+							void router.invalidate();
+						});
+					}
+				},
+				complete() {
+					requestOrganizationIds.delete(op.id);
+					observer.complete();
+				},
+			});
+
+			return () => {
+				requestOrganizationIds.delete(op.id);
+				subscription.unsubscribe();
+			};
+		});
+	};
+};
+
 /** TRPC client for typed requests to the backend */
 export const trpcClient = createTRPCClient<TrpcRouter>({
 	links: [
 		loggerLink(),
+		activeOrganizationLink,
 		httpBatchLink({
 			url: '/api/trpc',
 			transformer: superjson,
-			headers() {
+			headers({ opList }) {
 				const activeProjectId = getActiveProjectId();
 				const activeOrganizationId = getActiveOrganizationId();
+				for (const operation of opList) {
+					requestOrganizationIds.set(operation.id, activeOrganizationId);
+				}
 				return {
 					...(activeProjectId ? { 'x-nao-project-id': activeProjectId } : {}),
 					...(activeOrganizationId ? { 'x-nao-organization-id': activeOrganizationId } : {}),

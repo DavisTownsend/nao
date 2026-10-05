@@ -65,8 +65,11 @@ export async function hasProjectCloudBillingAccess(projectId: string): Promise<b
 		return true;
 	}
 	const project = await getProjectById(projectId);
-	if (!project?.orgId) {
+	if (!project) {
 		return false;
+	}
+	if (!project.orgId) {
+		throw new Error(`Cloud project ${projectId} is not assigned to an organization.`);
 	}
 	return hasOrganizationCloudBillingAccess(project.orgId);
 }

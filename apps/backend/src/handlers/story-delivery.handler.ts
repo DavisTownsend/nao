@@ -67,7 +67,9 @@ export async function runScheduledStoryDelivery(
 		if (!(await hasProjectCloudBillingAccess(context.projectId))) {
 			return;
 		}
-		const { queryData } = await refreshStoryData(context.story.chatId!, context.story.slug);
+		const { queryData } = await refreshStoryData(context.story.chatId!, context.story.slug, {
+			billingAccessVerifiedProjectId: context.projectId,
+		});
 		await deliver(context, queryData, skipDeliveries);
 	});
 }

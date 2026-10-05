@@ -456,6 +456,20 @@ describe('live story SQL execution', () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
+	it('does not build the story execution context when cloud billing access is restricted', async () => {
+		mocks.getSqlQueriesFromCode.mockResolvedValue({
+			query_warehouse: {
+				sqlQuery: 'SELECT * FROM orders',
+				databaseId: 'analytics',
+				adminMode: false,
+			},
+		});
+		vi.mocked(assertProjectCloudBillingAccess).mockRejectedValueOnce(new Error('restricted'));
+
+		await expect(refreshStoryData('chat-1', 'orders')).rejects.toThrow('restricted');
+		expect(mocks.buildToolContext).not.toHaveBeenCalled();
+	});
+
 	it('falls back to stored data when refresh fails without a cache', async () => {
 		const code = '<table query_id="query_warehouse" />';
 		const queryData = {

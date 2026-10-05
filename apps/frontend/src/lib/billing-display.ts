@@ -101,13 +101,19 @@ export function isHistoricalBillingStatus(status: string | null | undefined): bo
 }
 
 export function formatBillingPrice(amount: number, currency: string): string {
-	const fractionDigits = amount % 100 === 0 ? 0 : 2;
+	const normalizedCurrency = currency.toUpperCase();
+	const { maximumFractionDigits: minorUnitDigits = 2 } = new Intl.NumberFormat(undefined, {
+		style: 'currency',
+		currency: normalizedCurrency,
+	}).resolvedOptions();
+	const minorUnitDivisor = 10 ** minorUnitDigits;
+	const fractionDigits = amount % minorUnitDivisor === 0 ? 0 : minorUnitDigits;
 	return new Intl.NumberFormat(undefined, {
 		style: 'currency',
-		currency: currency.toUpperCase(),
+		currency: normalizedCurrency,
 		minimumFractionDigits: fractionDigits,
 		maximumFractionDigits: fractionDigits,
-	}).format(amount / 100);
+	}).format(amount / minorUnitDivisor);
 }
 
 export function formatBillingInterval(interval: string, intervalCount: number): string {

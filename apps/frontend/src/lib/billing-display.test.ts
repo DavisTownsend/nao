@@ -3,14 +3,18 @@ import { describe, expect, it } from 'vitest';
 import { formatBillingPrice } from './billing-display';
 
 describe('formatBillingPrice', () => {
-	it('preserves fractional currency amounts', () => {
-		expect(formatBillingPrice(199_999, 'eur')).toBe(
+	it.each([
+		{ amount: 199_999, currency: 'eur', majorAmount: 1_999.99, fractionDigits: 2 },
+		{ amount: 1_999, currency: 'jpy', majorAmount: 1_999, fractionDigits: 0 },
+		{ amount: 1_999, currency: 'kwd', majorAmount: 1.999, fractionDigits: 3 },
+	])('formats $currency amounts in the currency minor unit', ({ amount, currency, majorAmount, fractionDigits }) => {
+		expect(formatBillingPrice(amount, currency)).toBe(
 			new Intl.NumberFormat(undefined, {
 				style: 'currency',
-				currency: 'EUR',
-				minimumFractionDigits: 2,
-				maximumFractionDigits: 2,
-			}).format(1_999.99),
+				currency: currency.toUpperCase(),
+				minimumFractionDigits: fractionDigits,
+				maximumFractionDigits: fractionDigits,
+			}).format(majorAmount),
 		);
 	});
 });

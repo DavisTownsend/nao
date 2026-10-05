@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
 	listMappedOrganizations: vi.fn(),
+	logError: vi.fn(),
 	reconcileCustomer: vi.fn(),
 }));
 
@@ -14,7 +15,7 @@ vi.mock('../src/services/billing-reconciliation.service', () => ({
 }));
 
 vi.mock('../src/utils/logger', () => ({
-	logger: { error: vi.fn() },
+	logger: { error: mocks.logError },
 	serializeError: (error: unknown) => ({ error: String(error) }),
 }));
 
@@ -38,6 +39,11 @@ describe('cloud billing lifecycle', () => {
 		await expect(runCloudBillingLifecycle()).resolves.toBeUndefined();
 
 		expect(mocks.reconcileCustomer).toHaveBeenCalledTimes(2);
+		expect(mocks.logError).toHaveBeenCalledOnce();
+		expect(mocks.logError).toHaveBeenCalledWith('Cloud billing reconciliation failed for organization org-one', {
+			source: 'system',
+			context: { error: 'Error: temporary' },
+		});
 	});
 
 	it('limits concurrent Stripe reconciliation', async () => {

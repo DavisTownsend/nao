@@ -287,10 +287,13 @@ export class AgentService {
 			adminMode?: boolean;
 			/** Enables project-defined charts that render only in the web client. */
 			supportsCustomCharts?: boolean;
+			billingAccessVerifiedProjectId?: string;
 		} = {},
 	): Promise<AgentManager> {
 		this._disposeAgent(chat.id);
-		await assertProjectCloudBillingAccess(chat.projectId);
+		if (options.billingAccessVerifiedProjectId !== chat.projectId) {
+			await assertProjectCloudBillingAccess(chat.projectId);
+		}
 		const resolvedLlmSelectedModel = await this._getResolvedLlmSelectedModel(chat.projectId, modelSelection);
 		await assertBudgetNotExceeded(chat.projectId, resolvedLlmSelectedModel.provider, chat.userId);
 		const modelConfig = await this._getModelConfig(chat.projectId, resolvedLlmSelectedModel);

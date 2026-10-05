@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
 	assertProjectCloudBillingAccess: vi.fn(),
@@ -49,6 +49,17 @@ vi.mock('../src/services/posthog', () => ({
 import { telegramService } from '../src/services/telegram';
 
 describe('Telegram user validation', () => {
+	beforeEach(() => {
+		(
+			telegramService as unknown as {
+				_userByTelegramId: Map<string, string>;
+			}
+		)._userByTelegramId.clear();
+		mocks.assertProjectCloudBillingAccess.mockReset();
+		mocks.getUser.mockReset();
+		mocks.getUserRoleInProject.mockReset();
+	});
+
 	it('responds once when the Telegram user is not linked', async () => {
 		const post = vi.fn().mockResolvedValue(undefined);
 
@@ -87,5 +98,27 @@ describe('Telegram user validation', () => {
 			"❌ You don't have permission to use nao in this project. Please contact an administrator.",
 		);
 		expect(mocks.assertProjectCloudBillingAccess).not.toHaveBeenCalled();
+	});
+
+	it('responds once when cloud billing access is restricted', async () => {
+		const post = vi.fn().mockResolvedValue(undefined);
+		const service = telegramService as unknown as {
+			_handleWorkFlow: (
+				thread: { post: typeof post },
+				message: { text: string; raw: { from: { id: number } } },
+			) => Promise<void>;
+			_userByTelegramId: Map<string, string>;
+		};
+		service._userByTelegramId.set('789', 'user@example.com');
+		mocks.getUser.mockResolvedValue({ id: 'user-id' });
+		mocks.getUserRoleInProject.mockResolvedValue('user');
+		mocks.assertProjectCloudBillingAccess.mockRejectedValue(new Error('Cloud billing access is restricted'));
+
+		await service._handleWorkFlow({ post }, { text: 'Hello', raw: { from: { id: 789 } } });
+
+		expect(mocks.assertProjectCloudBillingAccess).toHaveBeenCalledOnce();
+		expect(post).toHaveBeenCalledOnce();
+		expect(post).toHaveBeenCalledWith('generic error');
+		expect(post).not.toHaveBeenCalledWith('✨ nao is answering...');
 	});
 });

@@ -127,46 +127,46 @@ describe('billing consistency queries', () => {
 		expect(pending).toMatchObject({ status: 'pending', attempts: 1, payload: { eventId: 'evt_pending' } });
 	});
 
-	it('leaves jobs pending until their handlers are registered', async () => {
+	it('claims all due jobs so missing handlers can be surfaced', async () => {
 		await db.insert(s.scheduledJob).values([
 			{
 				id: 'registered-job',
 				name: 'registered.job',
-				runAt: new Date(0),
+				runAt: new Date(-1_000),
 				status: 'pending',
 			},
 			{
 				id: 'unregistered-job',
 				name: 'unregistered.job',
-				runAt: new Date(0),
+				runAt: new Date(-1_000),
 				status: 'pending',
 			},
 		]);
 
-		await expect(claimDueJobs(new Date(), 10, 'worker-id', ['registered.job'])).resolves.toMatchObject([
+		await expect(claimDueJobs(new Date(-500), 10, 'worker-id')).resolves.toMatchObject([
 			{ id: 'registered-job', status: 'running' },
+			{ id: 'unregistered-job', status: 'running' },
 		]);
 
 		const [unregistered] = await db.select().from(s.scheduledJob).where(eq(s.scheduledJob.id, 'unregistered-job'));
-		expect(unregistered).toMatchObject({ status: 'pending', attempts: 0 });
+		expect(unregistered).toMatchObject({ status: 'running', attempts: 1 });
 	});
 
 	it('does not claim a candidate renamed after selection', async () => {
 		await db.insert(s.scheduledJob).values({
 			id: 'renamed-job',
 			name: 'registered.job',
-			runAt: new Date(0),
+			runAt: new Date(-2_000),
 			status: 'pending',
 		});
 
-		queueMicrotask(() => {
-			db.update(s.scheduledJob)
-				.set({ name: 'unregistered.job' })
-				.where(eq(s.scheduledJob.id, 'renamed-job'))
-				.run();
+		const update = db.update.bind(db);
+		vi.spyOn(db, 'update').mockImplementationOnce((table) => {
+			db.$client.prepare('UPDATE scheduled_job SET name = ? WHERE id = ?').run('unregistered.job', 'renamed-job');
+			return update(table);
 		});
 
-		await expect(claimDueJobs(new Date(), 10, 'worker-id', ['registered.job'])).resolves.toEqual([]);
+		await expect(claimDueJobs(new Date(-1_500), 10, 'worker-id')).resolves.toEqual([]);
 
 		const [renamed] = await db.select().from(s.scheduledJob).where(eq(s.scheduledJob.id, 'renamed-job'));
 		expect(renamed).toMatchObject({ name: 'unregistered.job', status: 'pending', attempts: 0 });

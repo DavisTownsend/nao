@@ -607,12 +607,18 @@ export class ProjectSlackBot {
 			timezone: undefined,
 		};
 
+		try {
+			await assertProjectCloudBillingAccess(this.projectId);
+		} catch (error) {
+			await ctx.thread.post(formatMessagingError(error));
+			return;
+		}
+
 		await this._validateUserAccess(ctx);
 		const activeStream: SlackActiveStream = { agent: null, stopRequested: false };
 		this._activeStreamsByThread.set(ctx.thread.id, activeStream);
 
 		try {
-			await assertProjectCloudBillingAccess(this.projectId);
 			this._getSlackStreamState(ctx).messageTs = await this._postSlackCard(ctx, [
 				createTextBlock('✨ nao is answering...'),
 				createStopButtonActions(),
@@ -817,6 +823,13 @@ export class ProjectSlackBot {
 				'❌ `/new <question>` is only available in direct messages and private channels. Send `/new` on its own here, or ask your question in a private conversation with nao.',
 				ephemeralOpts,
 			);
+			return;
+		}
+
+		try {
+			await assertProjectCloudBillingAccess(this.projectId);
+		} catch (error) {
+			await event.channel.postEphemeral(event.user, formatMessagingError(error), ephemeralOpts);
 			return;
 		}
 

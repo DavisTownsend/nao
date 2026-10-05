@@ -89,7 +89,7 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 				await Promise.all([
 					billing.refetch(),
 					invoices.refetch(),
-					...(canLoadUpcomingInvoice ? [upcomingInvoice.refetch()] : []),
+					queryClient.invalidateQueries({ queryKey: trpc.billing.getUpcomingInvoice.queryKey() }),
 					queryClient.invalidateQueries({ queryKey: trpc.billing.getAccess.queryKey() }),
 				]);
 				setIsBillingRefreshPolling(false);
@@ -120,7 +120,6 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 		canSyncStripeBilling &&
 		(search.portal === 'returned' || search.checkout === 'success' || search.checkout === 'subscribed');
 	const syncBillingWithStripe = syncStripeBilling.mutate;
-	const isSyncingBillingWithStripe = syncStripeBilling.isPending;
 
 	useEffect(() => {
 		if (!isCheckoutPolling || isCheckoutConfirmed) {
@@ -153,19 +152,6 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 	}, [shouldAutoSyncStripeBilling, syncBillingWithStripe]);
 
 	useEffect(() => {
-		if (!canSyncStripeBilling) {
-			return;
-		}
-		const refreshOnFocus = () => {
-			if (!isSyncingBillingWithStripe) {
-				syncBillingWithStripe();
-			}
-		};
-		window.addEventListener('focus', refreshOnFocus);
-		return () => window.removeEventListener('focus', refreshOnFocus);
-	}, [canSyncStripeBilling, isSyncingBillingWithStripe, syncBillingWithStripe]);
-
-	useEffect(() => {
 		if (!isBillingRefreshPolling) {
 			return;
 		}
@@ -176,9 +162,11 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 	const checkoutFeedback = getCheckoutFeedback(search.checkout, isCheckoutConfirmed, isCheckoutPolling);
 	const portalFeedback =
 		search.portal === 'returned'
-			? syncStripeBilling.isPending || isBillingRefreshPolling
-				? 'Refreshing billing changes from Stripe…'
-				: 'Billing details refreshed from Stripe.'
+			? syncStripeBilling.isError
+				? 'Unable to refresh billing details from Stripe.'
+				: syncStripeBilling.isPending || isBillingRefreshPolling
+					? 'Refreshing billing changes from Stripe…'
+					: 'Billing details refreshed from Stripe.'
 			: null;
 
 	return {

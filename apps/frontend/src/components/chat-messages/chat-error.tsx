@@ -76,8 +76,12 @@ export function ChatError({ className }: Props) {
 				access={billingAccess.data}
 				className={className}
 				isRunning={isRunning}
+				isAccessPending={billingAccess.isPending}
+				isAccessError={billingAccess.isError}
+				isAccessFetching={billingAccess.isFetching}
 				canRetry={Boolean(lastUserMessage)}
 				onManageBilling={(organizationId) => void openOrganizationBilling(organizationId)}
+				onRetryAccess={() => void billingAccess.refetch()}
 				onRetry={() => void retry()}
 			/>
 		);
@@ -131,8 +135,12 @@ function BillingAccessError({
 	access,
 	className,
 	isRunning,
+	isAccessPending,
+	isAccessError,
+	isAccessFetching,
 	canRetry,
 	onManageBilling,
+	onRetryAccess,
 	onRetry,
 }: {
 	access:
@@ -144,22 +152,38 @@ function BillingAccessError({
 		| undefined;
 	className?: string;
 	isRunning: boolean;
+	isAccessPending: boolean;
+	isAccessError: boolean;
+	isAccessFetching: boolean;
 	canRetry: boolean;
 	onManageBilling: (organizationId: string) => void;
+	onRetryAccess: () => void;
 	onRetry: () => void;
 }) {
 	return (
 		<Callout icon={CreditCardIcon} className={cn('px-4 py-3 text-sm', className)} role='status'>
 			<p className='font-medium text-foreground'>A subscription is needed to continue chatting.</p>
 			<p className='mt-1 text-muted-foreground'>
-				{access?.trialAvailable
-					? 'Start your free trial, then retry your message.'
-					: 'Manage your subscription, then retry your message.'}
+				{isAccessPending
+					? 'Loading billing details...'
+					: isAccessError
+						? 'Billing details could not be loaded.'
+						: access?.trialAvailable
+							? access.canManageBilling
+								? 'Start your free trial, then retry your message.'
+								: 'Ask an organization admin to start the free trial, then retry your message.'
+							: 'Manage your subscription, then retry your message.'}
 			</p>
 			<div className='mt-3 flex flex-wrap gap-2'>
 				{access?.canManageBilling && (
 					<Button size='sm' onClick={() => onManageBilling(access.organizationId)}>
 						Manage billing
+					</Button>
+				)}
+				{isAccessError && !access && (
+					<Button size='sm' disabled={isAccessFetching} onClick={onRetryAccess}>
+						<RotateCcwIcon />
+						Retry billing details
 					</Button>
 				)}
 				{canRetry && (

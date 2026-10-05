@@ -5,6 +5,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import { CloudBillingAccessBanner } from './cloud-billing-access-banner';
 
+type RefetchInterval = (query: { state: { data: Record<string, unknown> | undefined } }) => number | false;
+
 const restrictedTrialAccess = {
 	canManageBilling: true,
 	hasAccess: false,
@@ -20,13 +22,15 @@ const mocks = vi.hoisted(() => ({
 	cloudBillingEnabled: true,
 	invalidateQueries: vi.fn(async () => undefined),
 	navigate: vi.fn(async () => undefined),
+	refetchInterval: undefined as RefetchInterval | undefined,
 }));
 
 vi.mock('@tanstack/react-query', () => ({
-	useQuery: (options: { queryKey: string[]; enabled?: boolean }) => {
+	useQuery: (options: { queryKey: string[]; enabled?: boolean; refetchInterval?: RefetchInterval }) => {
 		if (options.queryKey[0] === 'config') {
 			return { data: { cloudBillingEnabled: mocks.cloudBillingEnabled } };
 		}
+		mocks.refetchInterval = options.refetchInterval;
 		if (options.enabled === false) {
 			return { data: undefined };
 		}
@@ -49,6 +53,7 @@ vi.mock('@/main', () => ({
 beforeEach(() => {
 	mocks.access = restrictedTrialAccess;
 	mocks.cloudBillingEnabled = true;
+	mocks.refetchInterval = undefined;
 	const values = new Map<string, string>();
 	vi.stubGlobal('localStorage', {
 		getItem: (key: string) => values.get(key) ?? null,
@@ -84,6 +89,15 @@ it('warns about a failed payment while access is kept', () => {
 
 	expect(screen.getByRole('status').textContent).toContain('A payment failed.');
 	expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it('stops polling after active billing access is confirmed', () => {
+	mocks.access = { ...restrictedTrialAccess, hasAccess: true, status: 'active' };
+
+	render(<CloudBillingAccessBanner />);
+
+	expect(mocks.refetchInterval?.({ state: { data: mocks.access } })).toBe(false);
+	expect(mocks.refetchInterval?.({ state: { data: restrictedTrialAccess } })).toBe(60_000);
 });
 
 it('selects the project organization before opening billing management', async () => {

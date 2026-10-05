@@ -21,8 +21,13 @@ export function setActiveOrganizationId(organizationId: string | null): void {
 	activeOrganizationStorage.set(organizationId);
 }
 
-export function clearStaleActiveOrganization(error: unknown): boolean {
-	if (!getActiveOrganizationId() || !(error instanceof TRPCClientError) || error.data?.code !== 'NOT_FOUND') {
+export function clearStaleActiveOrganization(organizationId: string | null, error: unknown): boolean {
+	if (
+		!organizationId ||
+		getActiveOrganizationId() !== organizationId ||
+		!(error instanceof TRPCClientError) ||
+		error.data?.code !== 'NOT_FOUND'
+	) {
 		return false;
 	}
 

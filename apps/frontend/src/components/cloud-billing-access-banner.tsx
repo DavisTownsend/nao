@@ -14,7 +14,8 @@ export function CloudBillingAccessBanner() {
 	const access = useQuery({
 		...trpc.billing.getAccess.queryOptions(),
 		enabled: config.data?.cloudBillingEnabled === true,
-		refetchInterval: 60_000,
+		refetchInterval: (query) =>
+			query.state.data?.status === 'active' && query.state.data.hasAccess ? false : 60_000,
 	});
 	const notice = getAccessNotice(access.data);
 

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
 	completeActivity: vi.fn(),
 	failActivity: vi.fn(),
 	refreshStoryData: vi.fn(),
+	hasProjectCloudBillingAccess: vi.fn(),
 }));
 
 vi.mock('../src/queries/story.queries', () => ({
@@ -22,6 +23,9 @@ vi.mock('../src/queries/activity.queries', () => ({
 }));
 vi.mock('../src/services/live-story', () => ({
 	refreshStoryData: mocks.refreshStoryData,
+}));
+vi.mock('../src/services/cloud-billing-access.service', () => ({
+	hasProjectCloudBillingAccess: mocks.hasProjectCloudBillingAccess,
 }));
 vi.mock('../src/handlers/story-delivery.handler', () => ({
 	deliverStoryOnRefresh: vi.fn(async () => undefined),
@@ -53,12 +57,15 @@ describe('scheduled Story refresh principal', () => {
 		});
 		mocks.startStoryRefreshActivity.mockResolvedValue({ id: 'activity-1' });
 		mocks.refreshStoryData.mockResolvedValue({ queryData: {} });
+		mocks.hasProjectCloudBillingAccess.mockResolvedValue(true);
 	});
 
 	it('executes warehouse queries as the Story owner', async () => {
 		await runScheduledStoryRefresh('story-1');
 
-		expect(mocks.refreshStoryData).toHaveBeenCalledWith('chat-1', 'orders');
+		expect(mocks.refreshStoryData).toHaveBeenCalledWith('chat-1', 'orders', {
+			billingAccessVerifiedProjectId: 'project-1',
+		});
 	});
 
 	it('fails the scheduled refresh when the owner has lost project access', async () => {

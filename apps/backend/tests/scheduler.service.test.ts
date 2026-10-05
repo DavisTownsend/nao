@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
 	claimDueJobs: vi.fn(),
 	deleteJob: vi.fn(),
 	enqueueOnceJob: vi.fn(),
+	getJobById: vi.fn(),
 	markJobFailed: vi.fn(),
 	reclaimStaleJobs: vi.fn(),
 	rescheduleJob: vi.fn(),
@@ -24,6 +25,7 @@ describe('scheduler', () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(new Date('2026-09-28T10:00:00.000Z'));
 		vi.clearAllMocks();
+		mocks.getJobById.mockResolvedValue(null);
 		mocks.reclaimStaleJobs.mockResolvedValue(0);
 	});
 
@@ -60,16 +62,14 @@ describe('scheduler', () => {
 		expect(mocks.rescheduleJob).not.toHaveBeenCalled();
 	});
 
-	it('only claims jobs with handlers registered in this process', async () => {
+	it('claims due jobs without filtering handler names', async () => {
 		registerJob('registered.job', vi.fn());
 		mocks.claimDueJobs.mockResolvedValueOnce([]);
 
 		startScheduler();
 		await vi.advanceTimersByTimeAsync(0);
 
-		expect(mocks.claimDueJobs).toHaveBeenCalledWith(new Date('2026-09-28T10:00:00.000Z'), 10, expect.any(String), [
-			'registered.job',
-		]);
+		expect(mocks.claimDueJobs).toHaveBeenCalledWith(new Date('2026-09-28T10:00:00.000Z'), 10, expect.any(String));
 	});
 
 	it('waits for an active poll before resetting scheduler state', async () => {
@@ -103,7 +103,6 @@ describe('scheduler', () => {
 			new Date('2026-09-28T10:00:00.000Z'),
 			10,
 			expect.any(String),
-			[],
 		);
 	});
 });

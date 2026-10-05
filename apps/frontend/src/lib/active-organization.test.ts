@@ -36,12 +36,24 @@ describe('active organization storage', () => {
 		expect(getActiveOrganizationId()).toBeNull();
 	});
 
+	it('leaves storage unchanged when no organization is selected', () => {
+		setActiveProjectId('project-id');
+		const error = TRPCClientError.from<TrpcRouter>({
+			error: { code: -32004, message: 'error', data: { code: 'NOT_FOUND', httpStatus: 404 } },
+		});
+
+		expect(clearStaleActiveOrganization(null, error)).toBe(false);
+		expect(getActiveOrganizationId()).toBeNull();
+		expect(getActiveProjectId()).toBe('project-id');
+	});
+
 	it.each([
-		['NOT_FOUND', -32004, 404, null, null, true],
-		['FORBIDDEN', -32003, 403, 'organization-id', 'project-id', false],
+		['NOT_FOUND', -32004, 404, 'organization-id', null, null, true],
+		['NOT_FOUND', -32004, 404, 'previous-organization-id', 'organization-id', 'project-id', false],
+		['FORBIDDEN', -32003, 403, 'organization-id', 'organization-id', 'project-id', false],
 	])(
 		'handles a parsed %s error',
-		(code, rpcCode, httpStatus, expectedOrganization, expectedProject, expectedCleared) => {
+		(code, rpcCode, httpStatus, requestedOrganization, expectedOrganization, expectedProject, expectedCleared) => {
 			setActiveOrganizationId('organization-id');
 			setActiveProjectId('project-id');
 			const error = TRPCClientError.from<TrpcRouter>({
@@ -49,7 +61,7 @@ describe('active organization storage', () => {
 			});
 
 			expect(error.data?.code).toBe(code);
-			expect(clearStaleActiveOrganization(error)).toBe(expectedCleared);
+			expect(clearStaleActiveOrganization(requestedOrganization, error)).toBe(expectedCleared);
 			expect(getActiveOrganizationId()).toBe(expectedOrganization);
 			expect(getActiveProjectId()).toBe(expectedProject);
 		},
