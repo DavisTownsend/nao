@@ -22,7 +22,7 @@ import { useStoryViewerSwitchStory } from './hooks/use-story-viewer-switch-story
 import { useStoryViewerVersionActions } from './hooks/use-story-viewer-version-actions';
 import { useStoryViewerVersions } from './hooks/use-story-viewer-versions';
 import { useStoryViewerViewMode } from './hooks/use-story-viewer-view-mode';
-import type { StoryFormat } from '@nao/shared/types';
+import type { ShareSource, StoryFormat } from '@nao/shared/types';
 import type { CustomStoryViewerAccess } from '@nao/shared/story-app';
 import type { Editor as TiptapEditor } from '@tiptap/react';
 import type { StoryCodeViewHandle } from './story-code-view';
@@ -54,11 +54,11 @@ interface StoryViewerProps {
 }
 
 export function StoryViewer(props: StoryViewerProps) {
-	const { isReadonlyMode: contextReadonlyMode, isReplay, shareId, shareType } = useSidePanel();
+	const { isReadonlyMode: contextReadonlyMode, isReplay, shareSource } = useSidePanel();
 	const isReadonlyMode = isReplay ? contextReadonlyMode : (props.isReadonlyMode ?? contextReadonlyMode);
 	const viewerAccess = useMemo(
-		() => (isReadonlyMode ? readonlyViewerAccess(props.chatId, shareId, shareType, isReplay) : null),
-		[isReadonlyMode, isReplay, props.chatId, shareId, shareType],
+		() => (isReadonlyMode ? readonlyViewerAccess(props.chatId, shareSource, isReplay) : null),
+		[isReadonlyMode, isReplay, props.chatId, shareSource],
 	);
 	const format = useStoryFormat(props.chatId, props.storySlug, isReadonlyMode, viewerAccess);
 
@@ -102,12 +102,11 @@ function useStoryFormat(
 
 function readonlyViewerAccess(
 	chatId: string,
-	shareId: string | null,
-	shareType: 'chat' | 'story' | null,
+	shareSource: ShareSource | null,
 	isReplay: boolean,
 ): CustomStoryViewerAccess | null {
-	if (shareType === 'chat' && shareId) {
-		return { kind: 'sharedChat', shareId };
+	if (shareSource?.type === 'chat' && shareSource.shareId) {
+		return { kind: 'sharedChat', shareId: shareSource.shareId };
 	}
 	return isReplay ? { kind: 'replay', chatId } : null;
 }
@@ -126,8 +125,7 @@ function ClassicStoryViewer({ chatId, storySlug, isReadonlyMode: readonlyProp, i
 		isReadonlyMode: contextReadonlyMode,
 		isReplay,
 		registerBeforeChange,
-		shareId,
-		shareType,
+		shareSource,
 		setCurrentStorySlug,
 		setCurrentStoryTabIndex,
 	} = useSidePanel();
@@ -273,7 +271,7 @@ function ClassicStoryViewer({ chatId, storySlug, isReadonlyMode: readonlyProp, i
 		handleRefreshData,
 	} = useStoryViewerLiveSettings({ chatId, storySlug: resolvedStorySlug });
 	const [isLiveSettingsOpen, setIsLiveSettingsOpen] = useState(false);
-	const { handleEnlarge } = useStoryViewerEnlarge({ chatId, storySlug: resolvedStorySlug });
+	const { handleEnlarge } = useStoryViewerEnlarge({ storyId });
 
 	const handleOpenShare = useCallback(() => setIsShareDialogOpen(true), [setIsShareDialogOpen]);
 	const handleOpenAnalytics = useCallback(() => setIsAnalyticsOpen(true), []);
@@ -357,8 +355,7 @@ function ClassicStoryViewer({ chatId, storySlug, isReadonlyMode: readonlyProp, i
 				chatId={chatId}
 				storySlug={resolvedStorySlug}
 				storyId={storyId}
-				shareId={shareId}
-				shareType={shareType}
+				shareSource={shareSource}
 				allStories={allStories}
 				onSwitchStory={switchStory}
 				viewMode={viewMode}

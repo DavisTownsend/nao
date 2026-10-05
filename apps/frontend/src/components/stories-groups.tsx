@@ -112,8 +112,7 @@ export function StoryCard({
 	const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
 	const moveHandler = canMove ? onMoveToFolder : undefined;
 
-	const canOpenPinShareDialog =
-		isAdmin && !item.sharedStoryId && item.kind === 'own' && !!item.chatId && !!item.storySlug;
+	const canOpenPinShareDialog = isAdmin && !item.isShared && item.kind === 'own' && !!item.chatId && !!item.storySlug;
 
 	const canSelect =
 		!isViewer &&
@@ -403,9 +402,8 @@ function StoryQuickActions({ item, onRequestPinShare }: { item: StoryItem; onReq
 
 	const certification = useToggleStoryCertification();
 
-	const canOpenPinShareDialog =
-		isAdmin && !item.sharedStoryId && item.kind === 'own' && !!item.chatId && !!item.storySlug;
-	const canTogglePin = isAdmin && !!item.sharedStoryId;
+	const canOpenPinShareDialog = isAdmin && !item.isShared && item.kind === 'own' && !!item.chatId && !!item.storySlug;
+	const canTogglePin = isAdmin && item.isShared;
 	const canInteractWithPin = canTogglePin || canOpenPinShareDialog;
 	const showPinSlot = canInteractWithPin || item.isPinned;
 
@@ -424,8 +422,8 @@ function StoryQuickActions({ item, onRequestPinShare }: { item: StoryItem; onReq
 	function handlePin(e: MouseEvent<HTMLButtonElement>) {
 		e.preventDefault();
 		e.stopPropagation();
-		if (canTogglePin && item.sharedStoryId) {
-			pinMutation.mutate({ sharedStoryId: item.sharedStoryId });
+		if (canTogglePin) {
+			pinMutation.mutate({ storyId: item.storyId });
 			return;
 		}
 		if (canOpenPinShareDialog) {
@@ -588,9 +586,9 @@ function StoryArchiveButton({ item, showArchived }: { item: StoryItem; showArchi
 		}
 		if (item.kind === 'own-standalone') {
 			if (showArchived) {
-				unarchiveStandalone.mutate({ storyId: item.id });
+				unarchiveStandalone.mutate({ storyId: item.storyId });
 			} else {
-				archiveStandalone.mutate({ storyId: item.id });
+				archiveStandalone.mutate({ storyId: item.storyId });
 			}
 			return;
 		}

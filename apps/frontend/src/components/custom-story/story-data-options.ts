@@ -5,7 +5,7 @@ import { chatActivityStore } from '@/stores/chat-activity';
 /** Where a custom story's `useQueryData` calls are answered from: the owner's chat, a share link, or a read-only viewer. */
 export type CustomStoryDataSource =
 	| { kind: 'owner'; chatId: string; storySlug: string }
-	| { kind: 'share'; shareId: string; versionNumber?: number }
+	| { kind: 'share'; storyId: string; versionNumber?: number }
 	| { kind: 'viewer'; access: CustomStoryViewerAccess; storySlug: string; versionNumber?: number };
 
 const QUERY_RETRY_DELAY_MS = 1500;
@@ -38,7 +38,7 @@ export function queryDataOptions(dataSource: CustomStoryDataSource, queryId: str
 	}
 	if (dataSource.kind === 'share') {
 		return trpc.storyShare.getCustomStoryQueryData.queryOptions({
-			shareId: dataSource.shareId,
+			storyId: dataSource.storyId,
 			queryId,
 			versionNumber: dataSource.versionNumber,
 		});
@@ -59,7 +59,7 @@ export function querySqlOptions(dataSource: CustomStoryDataSource, queryId: stri
 	}
 	if (dataSource.kind === 'share') {
 		return trpc.storyShare.getCustomStoryQuerySql.queryOptions({
-			shareId: dataSource.shareId,
+			storyId: dataSource.storyId,
 			queryId,
 			versionNumber: dataSource.versionNumber,
 		});
@@ -74,7 +74,7 @@ export function narrativesOptions(dataSource: CustomStoryDataSource) {
 		return trpc.customStoryViewer.getNarratives.queryOptions({ access, storySlug });
 	}
 	if (dataSource.kind === 'share') {
-		return trpc.storyShare.getCustomStoryNarratives.queryOptions({ shareId: dataSource.shareId });
+		return trpc.storyShare.getCustomStoryNarratives.queryOptions({ storyId: dataSource.storyId });
 	}
 	const { chatId, storySlug } = dataSource;
 	return trpc.story.getCustomStoryNarratives.queryOptions({ chatId, storySlug });

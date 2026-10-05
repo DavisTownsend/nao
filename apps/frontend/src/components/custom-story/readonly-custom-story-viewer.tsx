@@ -26,7 +26,7 @@ interface ReadonlyCustomStoryViewerProps {
 }
 
 export function ReadonlyCustomStoryViewer({ chatId, storySlug, access }: ReadonlyCustomStoryViewerProps) {
-	const { close, setCurrentStorySlug, isReplay, shareId, shareType } = useSidePanel();
+	const { close, setCurrentStorySlug, isReplay, shareSource } = useSidePanel();
 	const [viewMode, setViewMode] = useState<CustomStoryViewMode>('app');
 	const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
 	const contentQuery = useQuery(trpc.customStoryViewer.getVersion.queryOptions({ access, storySlug }));
@@ -68,8 +68,7 @@ export function ReadonlyCustomStoryViewer({ chatId, storySlug, access }: Readonl
 				chatId={chatId}
 				storySlug={storySlug}
 				storyId={content?.storyId}
-				shareId={shareId}
-				shareType={shareType}
+				shareSource={shareSource}
 				allStories={allStories}
 				onSwitchStory={switchStory}
 				viewMode={viewMode}

@@ -5,16 +5,10 @@ import { trpc } from '@/main';
 interface UseStoryViewerLiveSettingsParams {
 	chatId: string;
 	storySlug: string;
-	shareId?: string;
 	enabled?: boolean;
 }
 
-export const useStoryViewerLiveSettings = ({
-	chatId,
-	storySlug,
-	shareId,
-	enabled = true,
-}: UseStoryViewerLiveSettingsParams) => {
+export const useStoryViewerLiveSettings = ({ chatId, storySlug, enabled = true }: UseStoryViewerLiveSettingsParams) => {
 	const queryClient = useQueryClient();
 	const { data } = useQuery({ ...trpc.story.listVersions.queryOptions({ chatId, storySlug }), enabled });
 
@@ -35,15 +29,6 @@ export const useStoryViewerLiveSettings = ({
 			}),
 		]);
 
-	const invalidateSharedStory = async () => {
-		if (!shareId) {
-			return;
-		}
-		await queryClient.invalidateQueries({
-			queryKey: trpc.storyShare.get.queryKey({ shareId }),
-		});
-	};
-
 	const updateLiveSettingsMutation = useMutation(
 		trpc.story.updateLiveSettings.mutationOptions({
 			onSuccess: async () => {
@@ -55,7 +40,6 @@ export const useStoryViewerLiveSettings = ({
 						queryKey: trpc.story.getLatest.queryKey({ chatId, storySlug }),
 					}),
 					invalidateCustomStory(),
-					invalidateSharedStory(),
 				]);
 			},
 		}),
@@ -75,7 +59,6 @@ export const useStoryViewerLiveSettings = ({
 						queryKey: trpc.automation.feed.queryKey(),
 					}),
 					invalidateCustomStory(),
-					invalidateSharedStory(),
 				];
 				if (storyId) {
 					invalidations.push(

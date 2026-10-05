@@ -31,7 +31,7 @@ interface CustomStoryViewerProps {
 
 /** Side-panel view of a custom story */
 export function CustomStoryViewer({ chatId, storySlug }: CustomStoryViewerProps) {
-	const { close, setCurrentStorySlug, isReadonlyMode, isReplay, shareId, shareType } = useSidePanel();
+	const { close, setCurrentStorySlug, isReadonlyMode, isReplay, shareSource } = useSidePanel();
 	const story = useCustomStory(chatId, storySlug);
 	const { customStoryCreationEnabled } = useEffectiveUserGroupFeatures();
 	const { content } = story;
@@ -40,7 +40,7 @@ export function CustomStoryViewer({ chatId, storySlug }: CustomStoryViewerProps)
 
 	const sharing = useStoryViewerSharing({ chatId, storySlug });
 	const live = useStoryViewerLiveSettings({ chatId, storySlug });
-	const { handleEnlarge } = useStoryViewerEnlarge({ chatId, storySlug });
+	const { handleEnlarge } = useStoryViewerEnlarge({ storyId });
 	const [viewMode, setViewMode] = useState<CustomStoryViewMode>('app');
 	const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
 	const [isLiveSettingsOpen, setIsLiveSettingsOpen] = useState(false);
@@ -111,8 +111,7 @@ export function CustomStoryViewer({ chatId, storySlug }: CustomStoryViewerProps)
 				chatId={chatId}
 				storySlug={storySlug}
 				storyId={storyId}
-				shareId={shareId}
-				shareType={shareType}
+				shareSource={shareSource}
 				allStories={[]}
 				onSwitchStory={switchStory}
 				viewMode={viewMode}

@@ -59,15 +59,6 @@ export interface StoryRefreshFailure {
 	failedAt: string | Date;
 }
 
-interface DownloadConfig extends Pick<StoryDownloadOptions, 'onDownload'> {
-	chatId?: string;
-	storySlug?: string;
-	storyId?: string;
-	shareId?: string;
-	isOwner?: boolean;
-	versionNumber?: number;
-}
-
 interface ClassicViewModeControls {
 	viewMode: StoryViewMode;
 	onViewModeChange: (mode: StoryViewMode) => void;
@@ -98,7 +89,7 @@ export interface StoryPageHeaderProps {
 	onOpenChat?: () => void;
 	isOpeningChat?: boolean;
 	live?: LiveControls;
-	download?: DownloadConfig;
+	download?: StoryDownloadOptions;
 	storyId?: string | null;
 	canRename?: boolean;
 	isShared?: boolean;

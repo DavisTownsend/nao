@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { memo, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import type { ShareSource } from '@nao/shared/types';
 import type { StorySummary } from '@/lib/story.utils';
 import type { StoryViewMode } from './story-viewer.types';
 import type { StoryRefreshFailure } from '@/components/story-page-header';
@@ -49,8 +50,7 @@ interface StoryHeaderBaseProps {
 	chatId: string;
 	storySlug: string;
 	storyId?: string | null;
-	shareId?: string | null;
-	shareType?: 'chat' | 'story' | null;
+	shareSource?: ShareSource | null;
 	allStories: StorySummary[];
 	onSwitchStory: (id: string) => void;
 	currentVersion: number;
@@ -104,8 +104,7 @@ export const StoryHeader = memo(function StoryHeader({
 	chatId,
 	storySlug,
 	storyId,
-	shareId,
-	shareType,
+	shareSource,
 	allStories,
 	onSwitchStory,
 	currentVersion,
@@ -308,8 +307,7 @@ export const StoryHeader = memo(function StoryHeader({
 	const downloadOptions = {
 		chatId,
 		storySlug,
-		shareId: shareId ?? undefined,
-		shareType: shareType ?? undefined,
+		shareSource: shareSource ?? undefined,
 		isOwner: !isReadonlyMode,
 		versionNumber,
 		onDownload,
@@ -335,7 +333,7 @@ export const StoryHeader = memo(function StoryHeader({
 							<Info strokeWidth={2.25} />
 							<span>Analytics</span>
 						</DropdownMenuItem>
-						<DropdownMenuItem onSelect={onEnlarge}>
+						<DropdownMenuItem onSelect={onEnlarge} disabled={!storyId}>
 							<Maximize2 strokeWidth={2.25} />
 							<span>Expand</span>
 						</DropdownMenuItem>

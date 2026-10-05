@@ -180,7 +180,7 @@ export function CustomStoryPreviewPage({ chatId, storySlug, authorName }: Custom
 }
 
 interface SharedCustomStoryPageProps {
-	shareId: string;
+	storyId: string;
 	title: string;
 	authorName: string;
 	isLive: boolean;
@@ -191,7 +191,7 @@ interface SharedCustomStoryPageProps {
 
 /** A custom story opened from a share link: data comes through the share, limited to the queries the story uses. */
 export function SharedCustomStoryPage({
-	shareId,
+	storyId,
 	title,
 	authorName,
 	isLive,
@@ -200,33 +200,33 @@ export function SharedCustomStoryPage({
 	isOpeningChat,
 }: SharedCustomStoryPageProps) {
 	const queryClient = useQueryClient();
-	const contentQuery = useQuery(trpc.storyShare.getCustomVersion.queryOptions({ shareId }));
+	const contentQuery = useQuery(trpc.storyShare.getCustomVersion.queryOptions({ storyId }));
 	const content = contentQuery.data;
 	const versionNumber = content?.version.number;
 	const dataSource = useMemo<CustomStoryDataSource>(
-		() => ({ kind: 'share', shareId, versionNumber }),
-		[shareId, versionNumber],
+		() => ({ kind: 'share', storyId, versionNumber }),
+		[storyId, versionNumber],
 	);
 
 	const refreshMutation = useMutation(
 		trpc.storyShare.refreshData.mutationOptions({
 			onSettled: () =>
 				Promise.all([
-					queryClient.invalidateQueries({ queryKey: trpc.storyShare.get.queryKey({ shareId }) }),
-					queryClient.invalidateQueries({ queryKey: trpc.storyShare.getCustomVersion.queryKey({ shareId }) }),
+					queryClient.invalidateQueries({ queryKey: trpc.storyShare.get.queryKey({ storyId }) }),
+					queryClient.invalidateQueries({ queryKey: trpc.storyShare.getCustomVersion.queryKey({ storyId }) }),
 					queryClient.invalidateQueries({
-						queryKey: trpc.storyShare.getCustomStoryQueryData.queryKey({ shareId }),
+						queryKey: trpc.storyShare.getCustomStoryQueryData.queryKey({ storyId }),
 					}),
 					queryClient.invalidateQueries({
-						queryKey: trpc.storyShare.getCustomStoryNarratives.queryKey({ shareId }),
+						queryKey: trpc.storyShare.getCustomStoryNarratives.queryKey({ storyId }),
 					}),
 				]),
 		}),
 	);
 	const renderExport = useCallback(
 		(format: DownloadFormat, html: string) =>
-			trpcClient.storyShare.downloadCustom.mutate({ shareId, format, html }),
-		[shareId],
+			trpcClient.storyShare.downloadCustom.mutate({ storyId, format, html }),
+		[storyId],
 	);
 	const download = useCustomStoryDownload(content, dataSource, renderExport);
 
@@ -246,11 +246,11 @@ export function SharedCustomStoryPage({
 								lastRefreshFailure: content?.lastRefreshFailure,
 								isRefreshing: refreshMutation.isPending,
 								canRefresh,
-								onRefresh: () => refreshMutation.mutate({ shareId }),
+								onRefresh: () => refreshMutation.mutate({ storyId }),
 							}
 						: undefined
 				}
-				download={{ shareId, isOwner: false, onDownload: download }}
+				download={{ shareSource: { type: 'story', storyId }, isOwner: false, onDownload: download }}
 			/>
 			<CustomStoryBody
 				dataSource={dataSource}
