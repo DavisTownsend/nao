@@ -200,6 +200,7 @@ export const organizationBilling = pgTable('organization_billing', {
 	stripeCustomerId: text('stripe_customer_id').unique(),
 	stripeSubscriptionId: text('stripe_subscription_id').unique(),
 	stripePriceId: text('stripe_price_id'),
+	currentPeriodStartsAt: timestamp('current_period_starts_at'),
 	currentPeriodEndsAt: timestamp('current_period_ends_at'),
 	cancellationScheduled: boolean('cancellation_scheduled'),
 	hasDefaultPaymentMethod: boolean('has_default_payment_method'),

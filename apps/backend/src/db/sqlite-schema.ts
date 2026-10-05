@@ -213,6 +213,7 @@ export const organizationBilling = sqliteTable('organization_billing', {
 	stripeCustomerId: text('stripe_customer_id').unique(),
 	stripeSubscriptionId: text('stripe_subscription_id').unique(),
 	stripePriceId: text('stripe_price_id'),
+	currentPeriodStartsAt: integer('current_period_starts_at', { mode: 'timestamp_ms' }),
 	currentPeriodEndsAt: integer('current_period_ends_at', { mode: 'timestamp_ms' }),
 	cancellationScheduled: integer('cancellation_scheduled', { mode: 'boolean' }),
 	hasDefaultPaymentMethod: integer('has_default_payment_method', { mode: 'boolean' }),

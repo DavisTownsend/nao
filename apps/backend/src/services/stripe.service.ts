@@ -338,6 +338,7 @@ export async function cloudSubscriptionProjection(subscription: Stripe.Subscript
 	}
 
 	const trialEndsAt = stripeDate(subscription.trial_end);
+	const currentPeriodStartsAt = stripeDate(item.current_period_start);
 	const currentPeriodEndsAt = stripeDate(item.current_period_end);
 	const cancellationEndsAt = stripeDate(subscription.cancel_at);
 	const cancellationScheduled =
@@ -353,6 +354,7 @@ export async function cloudSubscriptionProjection(subscription: Stripe.Subscript
 		stripePriceId: item.price.id,
 		trialStartedAt: stripeDate(subscription.trial_start),
 		trialEndsAt,
+		currentPeriodStartsAt,
 		currentPeriodEndsAt,
 		cancellationScheduled,
 		hasDefaultPaymentMethod,
@@ -364,6 +366,15 @@ export async function cloudSubscriptionProjection(subscription: Stripe.Subscript
 					? currentPeriodEndsAt
 					: null,
 	};
+}
+
+export async function validateCloudBillingConfiguration(): Promise<void> {
+	await getCloudMonthlyPrice();
+	const taxSettings = await getStripeClient().tax.settings.retrieve();
+	if (taxSettings.status !== 'active') {
+		const missingFields = taxSettings.status_details.pending?.missing_fields?.join(', ');
+		throw new Error(`Stripe Tax must be active${missingFields ? `; missing: ${missingFields}` : ''}`);
+	}
 }
 
 export async function getCloudMonthlyPrice(): Promise<CloudMonthlyPrice> {

@@ -7,6 +7,7 @@ CREATE TABLE "organization_billing" (
 	"stripe_customer_id" text,
 	"stripe_subscription_id" text,
 	"stripe_price_id" text,
+	"current_period_starts_at" timestamp,
 	"current_period_ends_at" timestamp,
 	"cancellation_scheduled" boolean,
 	"has_default_payment_method" boolean,

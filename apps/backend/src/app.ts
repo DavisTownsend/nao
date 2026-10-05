@@ -70,6 +70,7 @@ import { posthog, PostHogEvent } from './services/posthog';
 import { ensureRecurring, registerJob, startScheduler, stopScheduler } from './services/scheduler.service';
 import { slackService } from './services/slack';
 import { seedSlackConfigFromEnv } from './services/slack-env-seed';
+import { validateCloudBillingConfiguration } from './services/stripe.service';
 import { TrpcRouter, trpcRouter } from './trpc/router';
 import { createContext } from './trpc/trpc';
 import { BudgetExceededError, HandlerError } from './utils/error';
@@ -407,6 +408,9 @@ app.setNotFoundHandler((request, reply) => {
 });
 
 export const startServer = async (opts: { port: number; host: string }) => {
+	if (isCloudBillingEnabled()) {
+		await validateCloudBillingConfiguration();
+	}
 	if (!isCloud) {
 		await ensureOrganizationSetup();
 	}

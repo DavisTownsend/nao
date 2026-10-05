@@ -182,6 +182,7 @@ function activeProjection(): SubscriptionProjection {
 		stripePriceId: 'price_cloud',
 		trialStartedAt: new Date('2026-01-01T00:00:00.000Z'),
 		trialEndsAt: new Date('2026-01-15T00:00:00.000Z'),
+		currentPeriodStartsAt: new Date('2026-01-15T00:00:00.000Z'),
 		currentPeriodEndsAt: new Date('2026-02-15T00:00:00.000Z'),
 		cancellationScheduled: false,
 		hasDefaultPaymentMethod: true,

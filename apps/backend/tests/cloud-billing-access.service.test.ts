@@ -89,8 +89,17 @@ describe('cloud billing access entitlement', () => {
 			entitlement('active', { cancellationScheduled: true, billingAccessEndsAt: past }),
 			false,
 		],
-		['past due while Stripe retries', entitlement('past_due', { currentPeriodEndsAt: future }), true],
-		['past due beyond its period end', entitlement('past_due', { currentPeriodEndsAt: past }), false],
+		[
+			'past due within its bounded payment grace',
+			entitlement('past_due', { currentPeriodStartsAt: recentlyPast, currentPeriodEndsAt: future }),
+			true,
+		],
+		[
+			'past due beyond its bounded payment grace',
+			entitlement('past_due', { currentPeriodStartsAt: past, currentPeriodEndsAt: future }),
+			false,
+		],
+		['past due without a period start', entitlement('past_due', { currentPeriodEndsAt: future }), false],
 		['unpaid', entitlement('unpaid'), false],
 		['paused', entitlement('paused'), false],
 		['incomplete', entitlement('incomplete'), false],
@@ -115,12 +124,10 @@ describe('project cloud billing access', () => {
 		expect(mocks.getOrganizationBilling).not.toHaveBeenCalled();
 	});
 
-	it('reports an invalid cloud project instead of treating it as delinquent', async () => {
+	it('denies access for a legacy cloud project without an organization', async () => {
 		mocks.getProjectById.mockResolvedValue({ orgId: null });
 
-		await expect(hasProjectCloudBillingAccess('orphaned-project')).rejects.toThrow(
-			'Cloud project orphaned-project is not assigned to an organization.',
-		);
+		await expect(hasProjectCloudBillingAccess('orphaned-project')).resolves.toBe(false);
 		expect(mocks.getOrganizationBilling).not.toHaveBeenCalled();
 	});
 
@@ -140,6 +147,7 @@ function entitlement(
 	overrides: Partial<{
 		stripeSubscriptionId: string;
 		trialEndsAt: Date;
+		currentPeriodStartsAt: Date;
 		currentPeriodEndsAt: Date;
 		billingAccessEndsAt: Date;
 		cancellationScheduled: boolean;
@@ -150,6 +158,7 @@ function entitlement(
 		billingStatus,
 		stripeSubscriptionId: null,
 		trialEndsAt: null,
+		currentPeriodStartsAt: null,
 		currentPeriodEndsAt: null,
 		billingAccessEndsAt: null,
 		...overrides,

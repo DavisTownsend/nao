@@ -12,6 +12,7 @@ export interface SubscriptionProjection {
 	stripePriceId: string;
 	trialStartedAt: Date | null;
 	trialEndsAt: Date | null;
+	currentPeriodStartsAt: Date | null;
 	currentPeriodEndsAt: Date | null;
 	cancellationScheduled: boolean;
 	hasDefaultPaymentMethod: boolean;

@@ -14,6 +14,7 @@ const stripeMocks = vi.hoisted(() => ({
 	resumeSubscription: vi.fn(),
 	retrieveCustomer: vi.fn(),
 	retrieveSubscription: vi.fn(),
+	retrieveTaxSettings: vi.fn(),
 }));
 
 vi.mock('stripe', () => ({
@@ -46,6 +47,7 @@ vi.mock('stripe', () => ({
 			resume: stripeMocks.resumeSubscription,
 			retrieve: stripeMocks.retrieveSubscription,
 		};
+		tax = { settings: { retrieve: stripeMocks.retrieveTaxSettings } };
 	},
 }));
 
@@ -68,6 +70,7 @@ import {
 	listCloudInvoices,
 	listCloudSubscriptions,
 	resumeCloudSubscription,
+	validateCloudBillingConfiguration,
 } from '../src/services/stripe.service';
 
 let originalEnv: typeof process.env;
@@ -91,6 +94,10 @@ beforeEach(() => {
 		deleted: false,
 		default_source: null,
 		invoice_settings: { default_payment_method: null },
+	});
+	stripeMocks.retrieveTaxSettings.mockResolvedValue({
+		status: 'active',
+		status_details: { active: {} },
 	});
 });
 
@@ -196,6 +203,26 @@ describe('getCloudMonthlyPrice', () => {
 		expect(() => getStripeClient()).toThrow('Stripe is unavailable because cloud billing is disabled');
 		expect(stripeMocks.construct).not.toHaveBeenCalled();
 		expect(stripeMocks.listPrices).not.toHaveBeenCalled();
+	});
+});
+
+describe('validateCloudBillingConfiguration', () => {
+	it('validates the configured Price and active Stripe Tax settings', async () => {
+		await expect(validateCloudBillingConfiguration()).resolves.toBeUndefined();
+
+		expect(stripeMocks.listPrices).toHaveBeenCalledOnce();
+		expect(stripeMocks.retrieveTaxSettings).toHaveBeenCalledOnce();
+	});
+
+	it('rejects pending Stripe Tax settings with missing fields', async () => {
+		stripeMocks.retrieveTaxSettings.mockResolvedValue({
+			status: 'pending',
+			status_details: { pending: { missing_fields: ['head_office'] } },
+		});
+
+		await expect(validateCloudBillingConfiguration()).rejects.toThrow(
+			'Stripe Tax must be active; missing: head_office',
+		);
 	});
 });
 
@@ -572,6 +599,7 @@ describe('cloud subscription projection', () => {
 		});
 
 		await expect(cloudSubscriptionProjection(cloudSubscription())).resolves.toMatchObject({
+			currentPeriodStartsAt: new Date(1_799_000_000_000),
 			hasDefaultPaymentMethod: true,
 		});
 	});
@@ -843,6 +871,7 @@ function cloudSubscription(overrides: Partial<Stripe.Subscription> = {}): Stripe
 		items: {
 			data: [
 				{
+					current_period_start: 1_799_000_000,
 					current_period_end: 1_800_000_000,
 					price: cloudMonthlyPrice(),
 					quantity: 1,

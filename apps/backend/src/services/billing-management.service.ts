@@ -154,6 +154,7 @@ async function requireAdminOrganization(input: AdminBillingInput): Promise<Cloud
 		stripeCustomerId: billing?.stripeCustomerId ?? null,
 		stripeSubscriptionId: billing?.stripeSubscriptionId ?? null,
 		stripePriceId: billing?.stripePriceId ?? null,
+		currentPeriodStartsAt: billing?.currentPeriodStartsAt ?? null,
 		currentPeriodEndsAt: billing?.currentPeriodEndsAt ?? null,
 		cancellationScheduled: billing?.cancellationScheduled ?? null,
 		hasDefaultPaymentMethod: billing?.hasDefaultPaymentMethod ?? null,

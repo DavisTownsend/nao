@@ -10,6 +10,7 @@ type CloudBillingEntitlement = {
 	billingStatus: BillingStatus | null;
 	stripeSubscriptionId: string | null;
 	trialEndsAt: Date | null;
+	currentPeriodStartsAt: Date | null;
 	currentPeriodEndsAt: Date | null;
 	billingAccessEndsAt: Date | null;
 	cancellationScheduled?: boolean | null;
@@ -38,8 +39,9 @@ export function hasCloudBillingAccess(entitlement: CloudBillingEntitlement | nul
 				? isAfterWithGrace(entitlement.trialEndsAt, now, ACTIVE_RECONCILIATION_GRACE_MS)
 				: isAfter(entitlement.trialEndsAt, now) &&
 						(!entitlement.billingAccessEndsAt || isAfter(entitlement.billingAccessEndsAt, now));
-		case 'active':
 		case 'past_due':
+			return isAfterWithGrace(entitlement.currentPeriodStartsAt, now, ACTIVE_RECONCILIATION_GRACE_MS);
+		case 'active':
 			return entitlement.cancellationScheduled
 				? isAfter(entitlement.billingAccessEndsAt ?? entitlement.currentPeriodEndsAt, now)
 				: isAfterWithGrace(
@@ -69,7 +71,7 @@ export async function hasProjectCloudBillingAccess(projectId: string): Promise<b
 		return false;
 	}
 	if (!project.orgId) {
-		throw new Error(`Cloud project ${projectId} is not assigned to an organization.`);
+		return false;
 	}
 	return hasOrganizationCloudBillingAccess(project.orgId);
 }

@@ -8543,6 +8543,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "current_period_starts_at": {
+          "name": "current_period_starts_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
         "current_period_ends_at": {
           "name": "current_period_ends_at",
           "type": "timestamp",
