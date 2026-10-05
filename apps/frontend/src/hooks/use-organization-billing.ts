@@ -24,9 +24,8 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 		refetchOnWindowFocus: false,
 		refetchInterval: (query) =>
 			(isCheckoutPolling &&
-				(search.checkout === 'subscribed'
-					? isHistoricalBillingStatus(query.state.data?.status)
-					: !query.state.data?.hasStripeSubscription)) ||
+				(!query.state.data?.hasStripeSubscription ||
+					(search.checkout === 'subscribed' && isHistoricalBillingStatus(query.state.data?.status)))) ||
 			(query.state.data?.status === 'paused' && isResumeConfirming) ||
 			isBillingRefreshPolling
 				? 2_000

@@ -49,7 +49,7 @@ describe('cloud billing access entitlement', () => {
 			}),
 			false,
 		],
-		['trial missing its end', entitlement('trialing'), false],
+		['trial missing its end', entitlement('trialing', { stripeSubscriptionId: 'sub_trial' }), false],
 		[
 			'paying trial within conversion grace',
 			entitlement('trialing', {
@@ -91,15 +91,15 @@ describe('cloud billing access entitlement', () => {
 		],
 		[
 			'past due within its bounded payment grace',
-			entitlement('past_due', { currentPeriodStartsAt: recentlyPast, currentPeriodEndsAt: future }),
+			entitlement('past_due', { currentPeriodStartsAt: past, currentPeriodEndsAt: recentlyPast }),
 			true,
 		],
 		[
 			'past due beyond its bounded payment grace',
-			entitlement('past_due', { currentPeriodStartsAt: past, currentPeriodEndsAt: future }),
+			entitlement('past_due', { currentPeriodStartsAt: recentlyPast, currentPeriodEndsAt: past }),
 			false,
 		],
-		['past due without a period start', entitlement('past_due', { currentPeriodEndsAt: future }), false],
+		['past due without a period end', entitlement('past_due', { currentPeriodStartsAt: recentlyPast }), false],
 		['unpaid', entitlement('unpaid'), false],
 		['paused', entitlement('paused'), false],
 		['incomplete', entitlement('incomplete'), false],

@@ -311,10 +311,10 @@ export class AgentService {
 			billingAccessVerifiedProjectId?: string;
 		} = {},
 	): Promise<AgentManager> {
-		this._disposeAgent(chat.id);
 		if (options.billingAccessVerifiedProjectId !== chat.projectId) {
 			await assertProjectCloudBillingAccess(chat.projectId);
 		}
+		this._disposeAgent(chat.id);
 		const resolvedLlmSelectedModel = await this._getResolvedLlmSelectedModel(chat.projectId, modelSelection);
 		await assertBudgetNotExceeded(chat.projectId, resolvedLlmSelectedModel.provider, chat.userId);
 		const modelConfig = await this._getModelConfig(chat.projectId, resolvedLlmSelectedModel);

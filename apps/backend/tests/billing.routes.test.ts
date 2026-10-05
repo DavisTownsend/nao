@@ -77,6 +77,7 @@ import * as orgQueries from '../src/queries/organization.queries';
 import * as stripeService from '../src/services/stripe.service';
 import { billingRoutes } from '../src/trpc/billing.routes';
 import { router } from '../src/trpc/trpc';
+import { HandlerError } from '../src/utils/error';
 
 const testRouter = router({ billing: billingRoutes });
 
@@ -301,6 +302,17 @@ describe('billing.createTrialCheckoutSession', () => {
 		expect(stripeMocks.createCustomer).not.toHaveBeenCalled();
 		expect(stripeMocks.createCheckout).not.toHaveBeenCalled();
 	});
+
+	it('maps unavailable Stripe trial Checkout to a conflict', async () => {
+		stripeMocks.createCheckout.mockRejectedValueOnce(
+			new stripeService.CloudInitialCheckoutUnavailableError('Trial Checkout is unavailable'),
+		);
+
+		await expect(caller().billing.createTrialCheckoutSession()).rejects.toMatchObject({
+			code: 'CONFLICT',
+			message: 'Trial Checkout is unavailable',
+		});
+	});
 });
 
 describe('billing management mutations', () => {
@@ -323,6 +335,15 @@ describe('billing management mutations', () => {
 
 		await expect(caller().billing.getInvoices()).resolves.toEqual(invoices);
 		expect(stripeService.listCloudInvoices).toHaveBeenCalledWith('cus_cloud');
+	});
+
+	it('preserves conflict errors from billing handlers', async () => {
+		stripeMocks.listInvoices.mockRejectedValueOnce(new HandlerError('CONFLICT', 'Billing update in progress'));
+
+		await expect(caller().billing.getInvoices()).rejects.toMatchObject({
+			code: 'CONFLICT',
+			message: 'Billing update in progress',
+		});
 	});
 
 	it('rejects invoice history access for non-admin members', async () => {
@@ -461,6 +482,22 @@ describe('billing management mutations', () => {
 		expect(stripeService.createCloudResubscribeSession).not.toHaveBeenCalled();
 	});
 
+	it('maps unavailable Stripe subscription Checkout to a conflict', async () => {
+		testState.membership = membership({
+			billingStatus: 'canceled',
+			stripeCustomerId: 'cus_cloud',
+			stripeSubscriptionId: 'sub_cloud',
+		});
+		stripeMocks.createResubscribe.mockRejectedValueOnce(
+			new stripeService.CloudSubscriptionUnavailableError('Subscription Checkout is unavailable'),
+		);
+
+		await expect(caller().billing.createResubscribeSession()).rejects.toMatchObject({
+			code: 'CONFLICT',
+			message: 'Subscription Checkout is unavailable',
+		});
+	});
+
 	it('requests an idempotent paused-subscription resume', async () => {
 		await expect(
 			caller().billing.resumeSubscription({ requestId: 'c7cc1630-972f-4e2a-a412-9ef6c0e59ef9' }),
@@ -469,6 +506,19 @@ describe('billing management mutations', () => {
 			organizationId: 'org-id',
 			stripeSubscriptionId: 'sub_cloud',
 			requestId: 'c7cc1630-972f-4e2a-a412-9ef6c0e59ef9',
+		});
+	});
+
+	it('maps an unavailable Stripe subscription resume to a bad request', async () => {
+		stripeMocks.resumeSubscription.mockRejectedValueOnce(
+			new stripeService.CloudSubscriptionResumeError('Subscription cannot be resumed'),
+		);
+
+		await expect(
+			caller().billing.resumeSubscription({ requestId: 'c7cc1630-972f-4e2a-a412-9ef6c0e59ef9' }),
+		).rejects.toMatchObject({
+			code: 'BAD_REQUEST',
+			message: 'Subscription cannot be resumed',
 		});
 	});
 });

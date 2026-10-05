@@ -3,7 +3,14 @@ import type Stripe from 'stripe';
 import * as billingQueries from '../queries/billing.queries';
 import { reconcileCloudBillingCustomer } from '../services/billing-reconciliation.service';
 import type { JobHandler } from '../services/scheduler.service';
-import { findCloudSubscription, getCloudCheckoutSubscription, getStripeEvent } from '../services/stripe.service';
+import {
+	findCloudSubscription,
+	getCloudCheckoutSubscription,
+	getStripeCheckoutSession,
+	getStripeEvent,
+	getStripeInvoice,
+	getStripePaymentMethod,
+} from '../services/stripe.service';
 import { CLOUD_MONTHLY_PLAN, STRIPE_WEBHOOK_PROCESS_JOB_NAME } from '../types/billing';
 
 export { STRIPE_WEBHOOK_PROCESS_JOB_NAME };
@@ -44,7 +51,19 @@ export const stripeWebhookProcessHandler: JobHandler<{ eventId?: unknown }> = as
 	}
 
 	try {
-		await processStripeEvent(await getStripeEvent(payload.eventId));
+		let stripeEvent: Stripe.Event | null = null;
+		try {
+			stripeEvent = await getStripeEvent(payload.eventId);
+		} catch (error) {
+			if (!isMissingStripeEvent(error)) {
+				throw error;
+			}
+		}
+		if (stripeEvent) {
+			await processStripeEvent(stripeEvent);
+		} else {
+			await processStoredStripeEvent(inboxEvent);
+		}
 		await billingQueries.markStripeWebhookEventProcessed(payload.eventId);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
@@ -59,72 +78,163 @@ async function processStripeEvent(event: Stripe.Event): Promise<void> {
 		if (eventSession.mode !== 'subscription' || eventSession.metadata?.nao_plan_key !== CLOUD_MONTHLY_PLAN.key) {
 			return;
 		}
-		const { session, subscription } = await getCloudCheckoutSubscription(eventSession.id);
-		const organizationId = session.metadata?.nao_org_id ?? session.client_reference_id;
-		if (!organizationId) {
-			throw new Error(`Stripe Checkout Session "${session.id}" has no organization metadata`);
-		}
-		if (stripeId(session.customer) !== stripeId(subscription.customer)) {
-			throw new Error(`Stripe Checkout Session "${session.id}" has an unexpected Customer`);
-		}
-		await reconcileCloudBillingCustomer({
-			stripeCustomerId: stripeId(session.customer),
-			organizationIdHint: organizationId,
-		});
+		await processCheckoutSession(eventSession.id);
 		return;
 	}
 
 	if (SUBSCRIPTION_EVENTS.has(event.type)) {
 		const eventSubscription = event.data.object as Stripe.Subscription;
-		const subscription = await findCloudSubscription(eventSubscription.id);
-		if (!subscription) {
-			return;
-		}
-		await reconcileCloudBillingCustomer({
-			stripeCustomerId: stripeId(subscription.customer),
-			organizationIdHint: subscription.metadata.nao_org_id,
-		});
+		await processSubscription(eventSubscription.id);
 		return;
 	}
 
 	if (INVOICE_EVENTS.has(event.type)) {
-		const invoice = event.data.object as Stripe.Invoice;
-		const subscriptionId = invoice.parent?.subscription_details?.subscription;
-		if (!subscriptionId) {
-			return;
-		}
-		const subscription = await findCloudSubscription(stripeId(subscriptionId));
-		if (!subscription) {
-			return;
-		}
-		const customerId = stripeId(subscription.customer);
-		if (invoice.customer && stripeId(invoice.customer) !== customerId) {
-			throw new Error(`Stripe Invoice "${invoice.id}" has an unexpected Customer`);
-		}
-		await reconcileCloudBillingCustomer({
-			stripeCustomerId: customerId,
-			organizationIdHint: subscription.metadata.nao_org_id,
-		});
+		await processInvoice(event.data.object as Stripe.Invoice);
 		return;
 	}
 
 	if (PAYMENT_METHOD_EVENTS.has(event.type)) {
-		const customerId = paymentMethodCustomerId(event);
-		if (customerId) {
-			await reconcileCloudBillingCustomer({ stripeCustomerId: customerId });
+		await processPaymentMethodEvent(
+			event.type,
+			event.data.object as Stripe.Customer | Stripe.PaymentMethod,
+			event.data.previous_attributes as { customer?: string | Stripe.Customer | null } | undefined,
+		);
+	}
+}
+
+async function processStoredStripeEvent(event: { type: string; stripeObjectId: string | null }): Promise<void> {
+	const checkoutEvent =
+		event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded';
+	if (
+		!checkoutEvent &&
+		!SUBSCRIPTION_EVENTS.has(event.type) &&
+		!INVOICE_EVENTS.has(event.type) &&
+		!PAYMENT_METHOD_EVENTS.has(event.type)
+	) {
+		return;
+	}
+	const objectId = event.stripeObjectId;
+	if (!objectId) {
+		throw new Error(`Stored Stripe event "${event.type}" has no object ID`);
+	}
+
+	if (checkoutEvent) {
+		const session = await getStripeCheckoutSession(objectId);
+		if (session.mode !== 'subscription' || session.metadata?.nao_plan_key !== CLOUD_MONTHLY_PLAN.key) {
+			return;
+		}
+		await processCheckoutSession(objectId);
+		return;
+	}
+	if (SUBSCRIPTION_EVENTS.has(event.type)) {
+		await processSubscription(objectId);
+		return;
+	}
+	if (INVOICE_EVENTS.has(event.type)) {
+		await processInvoice(await getStripeInvoice(objectId));
+		return;
+	}
+	if (event.type === 'customer.updated') {
+		await reconcileCloudBillingCustomer({ stripeCustomerId: objectId });
+		return;
+	}
+	if (event.type === 'payment_method.detached') {
+		await reconcileAllMappedCustomers();
+		return;
+	}
+	if (event.type === 'payment_method.attached' || event.type === 'payment_method.updated') {
+		await processPaymentMethodEvent(event.type, await getStripePaymentMethod(objectId));
+	}
+}
+
+async function processCheckoutSession(stripeCheckoutSessionId: string): Promise<void> {
+	const { session, subscription } = await getCloudCheckoutSubscription(stripeCheckoutSessionId);
+	if (session.mode !== 'subscription' || session.metadata?.nao_plan_key !== CLOUD_MONTHLY_PLAN.key) {
+		return;
+	}
+	const organizationId = session.metadata.nao_org_id ?? session.client_reference_id;
+	if (!organizationId) {
+		throw new Error(`Stripe Checkout Session "${session.id}" has no organization metadata`);
+	}
+	if (stripeId(session.customer) !== stripeId(subscription.customer)) {
+		throw new Error(`Stripe Checkout Session "${session.id}" has an unexpected Customer`);
+	}
+	await reconcileCloudBillingCustomer({
+		stripeCustomerId: stripeId(session.customer),
+		organizationIdHint: organizationId,
+	});
+}
+
+async function processSubscription(stripeSubscriptionId: string): Promise<void> {
+	const subscription = await findCloudSubscription(stripeSubscriptionId);
+	if (!subscription) {
+		return;
+	}
+	await reconcileCloudBillingCustomer({
+		stripeCustomerId: stripeId(subscription.customer),
+		organizationIdHint: subscription.metadata.nao_org_id,
+	});
+}
+
+async function processInvoice(invoice: Stripe.Invoice): Promise<void> {
+	const subscriptionId = invoice.parent?.subscription_details?.subscription;
+	if (!subscriptionId) {
+		return;
+	}
+	const subscription = await findCloudSubscription(stripeId(subscriptionId));
+	if (!subscription) {
+		return;
+	}
+	const customerId = stripeId(subscription.customer);
+	if (invoice.customer && stripeId(invoice.customer) !== customerId) {
+		throw new Error(`Stripe Invoice "${invoice.id}" has an unexpected Customer`);
+	}
+	await reconcileCloudBillingCustomer({
+		stripeCustomerId: customerId,
+		organizationIdHint: subscription.metadata.nao_org_id,
+	});
+}
+
+async function processPaymentMethodEvent(
+	eventType: string,
+	stripeObject: Stripe.Customer | Stripe.PaymentMethod,
+	previousAttributes?: { customer?: string | Stripe.Customer | null },
+): Promise<void> {
+	if (eventType === 'customer.updated') {
+		await reconcileCloudBillingCustomer({ stripeCustomerId: stripeObject.id });
+		return;
+	}
+
+	const customer = (stripeObject as Stripe.PaymentMethod).customer ?? previousAttributes?.customer;
+	if (customer) {
+		await reconcileCloudBillingCustomer({ stripeCustomerId: stripeId(customer) });
+		return;
+	}
+	if (eventType === 'payment_method.detached') {
+		await reconcileAllMappedCustomers();
+	}
+}
+
+async function reconcileAllMappedCustomers(): Promise<void> {
+	// ponytail: Stripe can omit the former Customer on detach; replace this scan with persisted ownership if it grows.
+	const billings = await billingQueries.listOrganizationBillingsWithStripeCustomers();
+	for (const billing of billings) {
+		if (billing.stripeCustomerId) {
+			await reconcileCloudBillingCustomer({
+				stripeCustomerId: billing.stripeCustomerId,
+				organizationIdHint: billing.orgId,
+			});
 		}
 	}
 }
 
-function paymentMethodCustomerId(event: Stripe.Event): string | null {
-	if (event.type === 'customer.updated') {
-		return (event.data.object as Stripe.Customer).id;
-	}
-
-	const paymentMethod = event.data.object as Stripe.PaymentMethod;
-	const previous = event.data.previous_attributes as { customer?: string | Stripe.Customer | null } | undefined;
-	const customer = paymentMethod.customer ?? previous?.customer;
-	return customer ? stripeId(customer) : null;
+function isMissingStripeEvent(error: unknown): boolean {
+	return (
+		typeof error === 'object' &&
+		error !== null &&
+		'statusCode' in error &&
+		(error as { statusCode?: unknown }).statusCode === 404
+	);
 }
 
 function stripeId(value: string | { id: string } | null): string {

@@ -256,6 +256,7 @@ describe('live story SQL execution', () => {
 
 		expect(mocks.queryAppDb).not.toHaveBeenCalled();
 		expect(assertProjectCloudBillingAccess).toHaveBeenCalledOnce();
+		expect(assertProjectCloudBillingAccess).toHaveBeenCalledWith('project-1');
 		expect(fetchMock).toHaveBeenCalledOnce();
 		expect(mocks.buildToolContext).toHaveBeenCalledWith({
 			projectId: 'project-1',

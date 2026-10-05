@@ -7,6 +7,8 @@ import { CloudBillingAccessBanner } from './cloud-billing-access-banner';
 
 type RefetchInterval = (query: { state: { data: Record<string, unknown> | undefined } }) => number | false;
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 const restrictedTrialAccess = {
 	canManageBilling: true,
 	hasAccess: false,
@@ -64,6 +66,7 @@ beforeEach(() => {
 afterEach(() => {
 	cleanup();
 	vi.clearAllMocks();
+	vi.useRealTimers();
 	vi.unstubAllGlobals();
 });
 
@@ -89,6 +92,48 @@ it('warns about a failed payment while access is kept', () => {
 
 	expect(screen.getByRole('status').textContent).toContain('A payment failed.');
 	expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it('rounds up the trial countdown within the three-day warning window', () => {
+	const now = new Date('2026-10-05T12:00:00.000Z');
+	vi.useFakeTimers();
+	vi.setSystemTime(now);
+	mocks.access = {
+		...restrictedTrialAccess,
+		hasAccess: true,
+		trialEndsAt: new Date(now.getTime() + DAY_MS + 1),
+	};
+
+	render(<CloudBillingAccessBanner />);
+
+	expect(screen.getByRole('status').textContent).toContain('2 days left in your free trial.');
+});
+
+it('stays hidden before the three-day trial warning window', () => {
+	const now = new Date('2026-10-05T12:00:00.000Z');
+	vi.useFakeTimers();
+	vi.setSystemTime(now);
+	mocks.access = {
+		...restrictedTrialAccess,
+		hasAccess: true,
+		trialEndsAt: new Date(now.getTime() + 3 * DAY_MS + 1),
+	};
+
+	render(<CloudBillingAccessBanner />);
+
+	expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('offers an available trial to non-managers without a billing action', () => {
+	mocks.access = { ...restrictedTrialAccess, canManageBilling: false, trialAvailable: true };
+
+	render(<CloudBillingAccessBanner />);
+
+	expect(screen.getByRole('status').textContent).toContain(
+		'An organization admin can activate 14 days of nao Cloud.',
+	);
+	expect(screen.getByText('Ask an organization admin to manage billing.')).toBeTruthy();
+	expect(screen.queryByRole('button', { name: 'Manage billing' })).toBeNull();
 });
 
 it('stops polling after active billing access is confirmed', () => {

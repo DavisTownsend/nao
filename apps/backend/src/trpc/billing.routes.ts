@@ -254,7 +254,11 @@ function getHandlerErrorCode(error: unknown): HandlerErrorCode | null {
 		return null;
 	}
 	const code = error.codeMessage;
-	return code === 'BAD_REQUEST' || code === 'UNAUTHORIZED' || code === 'FORBIDDEN' || code === 'NOT_FOUND'
+	return code === 'BAD_REQUEST' ||
+		code === 'UNAUTHORIZED' ||
+		code === 'FORBIDDEN' ||
+		code === 'NOT_FOUND' ||
+		code === 'CONFLICT'
 		? code
 		: null;
 }

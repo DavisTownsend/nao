@@ -2,15 +2,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
 	assertProjectCloudBillingAccess: vi.fn(),
+	createAgent: vi.fn(),
+	getChat: vi.fn(),
+	getChatByTelegramThread: vi.fn(),
 	getUser: vi.fn(),
 	getUserRoleInProject: vi.fn(),
+	upsertMessage: vi.fn(),
 }));
 
 vi.mock('../src/components/generate-chart', () => ({
 	generateChartImage: vi.fn(),
 }));
 
-vi.mock('../src/queries/chat.queries', () => ({}));
+vi.mock('../src/queries/chat.queries', () => ({
+	getChat: mocks.getChat,
+	getChatByTelegramThread: mocks.getChatByTelegramThread,
+	upsertMessage: mocks.upsertMessage,
+}));
 vi.mock('../src/queries/feedback.queries', () => ({}));
 vi.mock('../src/queries/project.queries', () => ({
 	getUserRoleInProject: mocks.getUserRoleInProject,
@@ -34,7 +42,7 @@ vi.mock('../src/utils/messaging-provider', () => ({
 }));
 
 vi.mock('../src/services/agent', () => ({
-	agentService: {},
+	agentService: { create: mocks.createAgent },
 }));
 
 vi.mock('../src/services/cloud-billing-access.service', () => ({
@@ -52,12 +60,39 @@ describe('Telegram user validation', () => {
 	beforeEach(() => {
 		(
 			telegramService as unknown as {
+				_projectId: string;
+				_redirectUrl: string;
+				_userByTelegramId: Map<string, string>;
+			}
+		)._projectId = 'project-id';
+		(
+			telegramService as unknown as {
+				_redirectUrl: string;
+				_userByTelegramId: Map<string, string>;
+			}
+		)._redirectUrl = 'https://nao.example/';
+		(
+			telegramService as unknown as {
 				_userByTelegramId: Map<string, string>;
 			}
 		)._userByTelegramId.clear();
 		mocks.assertProjectCloudBillingAccess.mockReset();
+		mocks.createAgent.mockReset().mockResolvedValue({
+			getModelId: vi.fn(() => 'model-id'),
+			stream: vi.fn(
+				() =>
+					new ReadableStream({
+						start(controller) {
+							controller.close();
+						},
+					}),
+			),
+		});
+		mocks.getChat.mockReset().mockResolvedValue([{ id: 'chat-id', messages: [] }]);
+		mocks.getChatByTelegramThread.mockReset().mockResolvedValue({ id: 'chat-id' });
 		mocks.getUser.mockReset();
 		mocks.getUserRoleInProject.mockReset();
+		mocks.upsertMessage.mockReset();
 	});
 
 	it('responds once when the Telegram user is not linked', async () => {
@@ -120,5 +155,26 @@ describe('Telegram user validation', () => {
 		expect(post).toHaveBeenCalledOnce();
 		expect(post).toHaveBeenCalledWith('generic error');
 		expect(post).not.toHaveBeenCalledWith('✨ nao is answering...');
+	});
+
+	it('starts answering when the entitled user passes the billing gate', async () => {
+		const sentMessage = { delete: vi.fn(), edit: vi.fn() };
+		const post = vi.fn().mockResolvedValue(sentMessage);
+		const service = telegramService as unknown as {
+			_handleWorkFlow: (
+				thread: { id: string; post: typeof post },
+				message: { text: string; raw: { from: { id: number } } },
+			) => Promise<void>;
+			_userByTelegramId: Map<string, string>;
+		};
+		service._userByTelegramId.set('101', 'user@example.com');
+		mocks.getUser.mockResolvedValue({ id: 'user-id' });
+		mocks.getUserRoleInProject.mockResolvedValue('user');
+
+		await service._handleWorkFlow({ id: 'thread-id', post }, { text: 'Hello', raw: { from: { id: 101 } } });
+
+		expect(mocks.assertProjectCloudBillingAccess).toHaveBeenCalledWith('project-id');
+		expect(post).toHaveBeenNthCalledWith(1, '✨ nao is answering...');
+		expect(mocks.createAgent).toHaveBeenCalledOnce();
 	});
 });

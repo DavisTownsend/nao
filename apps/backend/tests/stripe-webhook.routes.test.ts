@@ -37,7 +37,7 @@ import { stripeWebhookRoutes } from '../src/routes/stripe-webhook';
 
 describe('Stripe webhook route', () => {
 	beforeEach(async () => {
-		vi.clearAllMocks();
+		vi.resetAllMocks();
 		testState.secretKey = 'sk_test_sandbox';
 		await stripeWebhookRoutes({ post: testMocks.post } as never);
 	});

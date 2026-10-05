@@ -328,6 +328,18 @@ export async function getStripeEvent(stripeEventId: string): Promise<Stripe.Even
 	return getStripeClient().events.retrieve(stripeEventId);
 }
 
+export async function getStripeCheckoutSession(stripeCheckoutSessionId: string): Promise<Stripe.Checkout.Session> {
+	return getStripeClient().checkout.sessions.retrieve(stripeCheckoutSessionId);
+}
+
+export async function getStripeInvoice(stripeInvoiceId: string): Promise<Stripe.Invoice> {
+	return getStripeClient().invoices.retrieve(stripeInvoiceId);
+}
+
+export async function getStripePaymentMethod(stripePaymentMethodId: string): Promise<Stripe.PaymentMethod> {
+	return getStripeClient().paymentMethods.retrieve(stripePaymentMethodId);
+}
+
 export async function cloudSubscriptionProjection(subscription: Stripe.Subscription): Promise<SubscriptionProjection> {
 	if (!isBillingStatus(subscription.status)) {
 		throw new Error(`Unsupported Stripe subscription status "${subscription.status}"`);

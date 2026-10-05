@@ -298,7 +298,7 @@ class TeamsService {
 		const agent = await agentService.create(
 			{ ...chat, userId: ctx.user!.id, projectId: ctx.config.projectId },
 			ctx.config.modelSelection,
-			{ supportsCustomCharts: false },
+			{ billingAccessVerifiedProjectId: ctx.config.projectId, supportsCustomCharts: false },
 		);
 		ctx.modelId = agent.getModelId();
 		return agent.stream(chat.messages, { provider: 'teams', timezone: ctx.timezone });

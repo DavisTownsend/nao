@@ -4,9 +4,10 @@ const mocks = vi.hoisted(() => ({
 	hasAccess: vi.fn(),
 	notifyUsers: vi.fn(),
 	refreshStoryData: vi.fn(),
+	updateJobPayload: vi.fn(),
 }));
 
-vi.mock('../src/queries/scheduled-job.queries', () => ({ updateJobPayload: vi.fn() }));
+vi.mock('../src/queries/scheduled-job.queries', () => ({ updateJobPayload: mocks.updateJobPayload }));
 vi.mock('../src/queries/shared-story.queries', () => ({
 	getStoryShareAccess: vi.fn(async () => ({
 		allowedUserIds: [],
@@ -39,7 +40,14 @@ vi.mock('../src/services/cloud-billing-access.service', () => ({
 }));
 vi.mock('../src/services/live-story', () => ({ refreshStoryData: mocks.refreshStoryData }));
 vi.mock('../src/services/notification.service', () => ({
-	NotificationChannelDeliveryError: class extends Error {},
+	NotificationChannelDeliveryError: class extends Error {
+		constructor(
+			readonly succeeded: Array<{ userId: string; channel: string }>,
+			readonly failed: Array<{ userId: string; channel: string }>,
+		) {
+			super('Notification channel delivery failed');
+		}
+	},
 	notifyUsers: mocks.notifyUsers,
 }));
 vi.mock('../src/services/story-recipients', () => ({
@@ -57,7 +65,8 @@ vi.mock('../src/utils/story-links', () => ({
 	storyPath: vi.fn(() => '/stories/story-id'),
 }));
 
-import { runScheduledStoryDelivery } from '../src/handlers/story-delivery.handler';
+import { runScheduledStoryDelivery, storyDeliveryHandler } from '../src/handlers/story-delivery.handler';
+import { NotificationChannelDeliveryError } from '../src/services/notification.service';
 
 beforeEach(() => {
 	vi.clearAllMocks();
@@ -87,4 +96,28 @@ it('delivers the refreshed story when the project has billing access', async () 
 		expect.objectContaining({ channels: ['email'] }),
 		{ skipDeliveries: [], throwOnChannelError: true },
 	);
+});
+
+it('preserves successful channels when the scheduler retries delivery', async () => {
+	mocks.hasAccess.mockResolvedValue(true);
+	const previousSkips = [{ userId: 'recipient-user-id', channel: 'slack' as const }];
+	const newlySucceeded = [{ userId: 'recipient-user-id', channel: 'email' as const }];
+	const error = new NotificationChannelDeliveryError(newlySucceeded, [
+		{ userId: 'recipient-user-id', channel: 'in_app' },
+	]);
+	mocks.notifyUsers.mockRejectedValueOnce(error);
+
+	await expect(
+		storyDeliveryHandler({ storyId: 'story-id', skipDeliveries: previousSkips }, { id: 'job-id' } as never),
+	).rejects.toBe(error);
+
+	expect(mocks.notifyUsers).toHaveBeenCalledWith(
+		['recipient-user-id'],
+		expect.objectContaining({ channels: ['email'] }),
+		{ skipDeliveries: previousSkips, throwOnChannelError: true },
+	);
+	expect(mocks.updateJobPayload).toHaveBeenCalledWith('job-id', {
+		storyId: 'story-id',
+		skipDeliveries: [...previousSkips, ...newlySucceeded],
+	});
 });

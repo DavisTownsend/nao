@@ -10,9 +10,13 @@ type MessageHandler = (
 
 const teamsHarness = vi.hoisted(() => ({
 	billingAccess: vi.fn(),
+	createAgent: vi.fn(),
 	credentials: [] as Array<[string, string, string]>,
+	getChat: vi.fn(),
+	getChatByTeamsThread: vi.fn(),
 	messageHandlers: [] as MessageHandler[],
 	projectRole: vi.fn(),
+	upsertMessage: vi.fn(),
 }));
 
 vi.mock('@azure/identity', () => ({
@@ -67,7 +71,11 @@ vi.mock('../src/components/generate-chart', () => ({
 }));
 
 vi.mock('../src/queries/chart-image', () => ({}));
-vi.mock('../src/queries/chat.queries', () => ({}));
+vi.mock('../src/queries/chat.queries', () => ({
+	getChat: teamsHarness.getChat,
+	getChatByTeamsThread: teamsHarness.getChatByTeamsThread,
+	upsertMessage: teamsHarness.upsertMessage,
+}));
 vi.mock('../src/queries/feedback.queries', () => ({}));
 vi.mock('../src/queries/project.queries', () => ({
 	getUserRoleInProject: teamsHarness.projectRole,
@@ -76,7 +84,7 @@ vi.mock('../src/queries/user.queries', () => ({
 	getUser: vi.fn(async () => ({ id: 'user-id' })),
 }));
 vi.mock('../src/services/agent', () => ({
-	agentService: { create: vi.fn(), get: vi.fn() },
+	agentService: { create: teamsHarness.createAgent, get: vi.fn() },
 }));
 vi.mock('../src/services/cloud-billing-access.service', () => ({
 	assertProjectCloudBillingAccess: teamsHarness.billingAccess,
@@ -96,9 +104,13 @@ vi.mock('../src/utils/messaging-provider', () => ({
 describe('TeamsService', () => {
 	beforeEach(() => {
 		teamsHarness.billingAccess.mockReset().mockRejectedValue(new Error('stop after access check'));
+		teamsHarness.createAgent.mockReset();
 		teamsHarness.credentials.length = 0;
+		teamsHarness.getChat.mockReset();
+		teamsHarness.getChatByTeamsThread.mockReset();
 		teamsHarness.messageHandlers.length = 0;
 		teamsHarness.projectRole.mockReset().mockResolvedValue('user');
+		teamsHarness.upsertMessage.mockReset();
 	});
 
 	it('keeps each webhook handler bound to its project configuration', async () => {
@@ -144,5 +156,63 @@ describe('TeamsService', () => {
 		expect(teamsHarness.projectRole).toHaveBeenNthCalledWith(2, 'project-b', 'user-id');
 		expect(teamsHarness.billingAccess).toHaveBeenNthCalledWith(1, 'project-a');
 		expect(teamsHarness.billingAccess).toHaveBeenNthCalledWith(2, 'project-b');
+	});
+
+	it('posts only the billing error when access is blocked', async () => {
+		const config: TeamsConfig = {
+			projectId: 'project-blocked',
+			appId: 'app-blocked',
+			appPassword: 'password-blocked',
+			tenantId: 'tenant-blocked',
+			redirectUrl: 'https://blocked.example',
+		};
+		teamsService.getWebhooks(config);
+		const handler = teamsHarness.messageHandlers[0];
+		const post = vi.fn(async () => ({}));
+
+		await handler(
+			{ isDM: true, post, subscribe: vi.fn(async () => undefined) },
+			{
+				text: 'question',
+				raw: { from: { aadObjectId: 'aad-id' }, conversation: { tenantId: 'sender-tenant' } },
+			},
+		);
+
+		expect(post).toHaveBeenCalledOnce();
+		expect(post).toHaveBeenCalledWith('billing blocked');
+		expect(post).not.toHaveBeenCalledWith('✨ nao is answering...');
+	});
+
+	it('passes the completed billing check to agent creation', async () => {
+		const config: TeamsConfig = {
+			projectId: 'project-a',
+			appId: 'app-a',
+			appPassword: 'password-a',
+			tenantId: 'tenant-a',
+			redirectUrl: 'https://a.example',
+		};
+		const response = { edit: vi.fn(), delete: vi.fn() };
+		const thread = {
+			id: 'thread-id',
+			isDM: true,
+			post: vi.fn(async () => response),
+			subscribe: vi.fn(async () => undefined),
+		};
+		teamsHarness.billingAccess.mockResolvedValue(undefined);
+		teamsHarness.getChatByTeamsThread.mockResolvedValue({ id: 'chat-id' });
+		teamsHarness.getChat.mockResolvedValue([{ id: 'chat-id', messages: [] }]);
+		teamsHarness.createAgent.mockRejectedValue(new Error('stop after agent creation'));
+
+		teamsService.getWebhooks(config);
+		await teamsHarness.messageHandlers[0](thread, {
+			text: 'question',
+			raw: { from: { aadObjectId: 'aad-id' }, conversation: { tenantId: 'sender-tenant' } },
+		});
+
+		expect(teamsHarness.createAgent).toHaveBeenCalledWith(
+			expect.objectContaining({ id: 'chat-id', projectId: 'project-a' }),
+			undefined,
+			{ billingAccessVerifiedProjectId: 'project-a', supportsCustomCharts: false },
+		);
 	});
 });

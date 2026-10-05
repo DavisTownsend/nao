@@ -1,6 +1,13 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import type * as EnvModule from '../src/env';
+
+vi.mock('../src/env', async (importOriginal) => {
+	const actual = await importOriginal<typeof EnvModule>();
+	return { ...actual, env: { ...actual.env, DB_URI: 'sqlite::memory:' } };
+});
+
 vi.mock('../src/db/db', async () => {
 	const { default: Database } = await import('better-sqlite3');
 	const { drizzle } = await import('drizzle-orm/better-sqlite3');
@@ -85,7 +92,7 @@ describe('billing consistency queries', () => {
 		});
 	});
 
-	it('revives a failed one-shot job but leaves pending work untouched', async () => {
+	it('does not reset exhausted or pending one-shot jobs on duplicate enqueue', async () => {
 		await db.insert(s.scheduledJob).values([
 			{
 				id: 'failed-stripe-job',
@@ -93,7 +100,9 @@ describe('billing consistency queries', () => {
 				payload: { eventId: 'evt_failed' },
 				runAt: new Date(0),
 				status: 'failed',
-				attempts: 10,
+				attempts: 3,
+				maxAttempts: 3,
+				lastError: 'retry budget exhausted',
 				uniqueKey: 'stripe-event:evt_failed',
 			},
 			{
@@ -114,7 +123,7 @@ describe('billing consistency queries', () => {
 				uniqueKey: 'stripe-event:evt_failed',
 				maxAttempts: 10,
 			}),
-		).resolves.toMatchObject({ status: 'pending', attempts: 0, lastError: null });
+		).resolves.toBeNull();
 		await expect(
 			enqueueOnceJob({
 				name: 'stripe.webhook.process',
@@ -123,6 +132,14 @@ describe('billing consistency queries', () => {
 			}),
 		).resolves.toBeNull();
 
+		const [failed] = await db.select().from(s.scheduledJob).where(eq(s.scheduledJob.id, 'failed-stripe-job'));
+		expect(failed).toMatchObject({
+			status: 'failed',
+			attempts: 3,
+			maxAttempts: 3,
+			lastError: 'retry budget exhausted',
+			payload: { eventId: 'evt_failed' },
+		});
 		const [pending] = await db.select().from(s.scheduledJob).where(eq(s.scheduledJob.id, 'pending-stripe-job'));
 		expect(pending).toMatchObject({ status: 'pending', attempts: 1, payload: { eventId: 'evt_pending' } });
 	});
