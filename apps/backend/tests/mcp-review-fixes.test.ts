@@ -269,6 +269,11 @@ describe('MCP connect tool', () => {
 });
 
 describe('MCP tool registration', () => {
+	it('keeps clarification available to focused agent allowlists', () => {
+		expect(getTools(null, undefined, {})).toHaveProperty('clarification');
+		expect(getTools(null, undefined, { builtinToolAllowlist: ['clarification'] })).toHaveProperty('clarification');
+	});
+
 	it('omits the MCP tools when the requested allowlist is empty or unavailable', () => {
 		vi.spyOn(mcpService, 'getConfiguredServerNames').mockReturnValue(['configured']);
 

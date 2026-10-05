@@ -153,6 +153,7 @@ export const getTools = (
 
 	const allTools = {
 		...baseTools,
+		clarification: clarificationTool,
 		...(options.onboarding && {
 			onboarding_command: onboardingCommandTool,
 			onboarding_progress: onboardingProgressTool,

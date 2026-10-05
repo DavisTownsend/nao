@@ -58,7 +58,7 @@ export const trpcClient = createTRPCClient<TrpcRouter>({
 			headers() {
 				const activeOrganizationId = getActiveOrganizationId();
 				return {
-					...(getProjectRequestHeaders()),
+					...getProjectRequestHeaders(),
 					...(activeOrganizationId ? { 'x-nao-organization-id': activeOrganizationId } : {}),
 				};
 			},
