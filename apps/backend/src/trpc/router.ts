@@ -12,6 +12,7 @@ import { chatForkRoutes } from './chat-fork.routes';
 import { citationRoutes } from './citation.routes';
 import { contextExplorerRoutes } from './context-explorer.routes';
 import { contextRecommendationRoutes } from './context-recommendation.routes';
+import { customStoryViewerRoutes } from './custom-story-viewer.routes';
 import { embedRoutes } from './embed.routes';
 import { favoriteRoutes } from './favorite.routes';
 import { feedbackRoutes } from './feedback.routes';
@@ -24,10 +25,12 @@ import { mcpRoutes } from './mcp.routes';
 import { mcpEndpointRoutes } from './mcp-endpoint.routes';
 import { mcpOAuthClientsRoutes } from './mcp-oauth-clients.routes';
 import { memoryRoutes } from './memory.routes';
+import { notificationRoutes } from './notification.routes';
 import { onboardingRoutes } from './onboarding.routes';
 import { organizationRoutes } from './organization.routes';
 import { posthogRoutes } from './posthog.routes';
 import { projectRoutes } from './project.routes';
+import { sandboxSecretRoutes } from './sandbox-secret.routes';
 import { sharedChatRoutes } from './shared-chat.routes';
 import { sharedStoryRoutes } from './shared-story.routes';
 import { skillRoutes } from './skill.routes';
@@ -35,11 +38,13 @@ import { sqlRoutes } from './sql.routes';
 import { storageRoutes } from './storage.routes';
 import { storyRoutes } from './story.routes';
 import { storyFolderRoutes } from './story-folder.routes';
+import { storyThemeRoutes } from './story-theme.routes';
 import { systemRoutes } from './system.routes';
 import { transcribeRoutes } from './transcribe.routes';
 import { router } from './trpc';
 import { usageRoutes } from './usage.routes';
 import { userRoutes } from './user.routes';
+import { userGroupRoutes } from './user-group.routes';
 
 export const trpcRouter = router({
 	analyticsEvent: analyticsEventRoutes,
@@ -52,6 +57,7 @@ export const trpcRouter = router({
 	map: mapRoutes,
 	sql: sqlRoutes,
 	sharedChat: sharedChatRoutes,
+	customStoryViewer: customStoryViewerRoutes,
 	automation: automationRoutes,
 	chatFork: chatForkRoutes,
 	citation: citationRoutes,
@@ -69,9 +75,12 @@ export const trpcRouter = router({
 	storyShare: sharedStoryRoutes,
 	story: storyRoutes,
 	storyFolder: storyFolderRoutes,
+	storyTheme: storyThemeRoutes,
 	usage: usageRoutes,
 	user: userRoutes,
+	userGroup: userGroupRoutes,
 	memory: memoryRoutes,
+	notification: notificationRoutes,
 	onboarding: onboardingRoutes,
 	organization: organizationRoutes,
 	authConfig: authConfigRoutes,
@@ -80,6 +89,7 @@ export const trpcRouter = router({
 	mcp: mcpRoutes,
 	mcpEndpoint: mcpEndpointRoutes,
 	mcpOAuthClients: mcpOAuthClientsRoutes,
+	sandboxSecret: sandboxSecretRoutes,
 	system: systemRoutes,
 	skill: skillRoutes,
 	transcribe: transcribeRoutes,

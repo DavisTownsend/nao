@@ -40,6 +40,7 @@ export class TestAgentService extends AgentService {
 	 */
 	async runTest(
 		projectId: string,
+		userId: string,
 		prompt: string,
 		modelSelection?: LlmSelectedModel,
 		costs?: ModelCosts,
@@ -52,9 +53,8 @@ export class TestAgentService extends AgentService {
 			createdAt: Date.now(),
 			updatedAt: Date.now(),
 			messages: [userMessage],
-			userId: 'test',
+			userId,
 			projectId,
-			testMode: true,
 		};
 
 		const agent = await this.create(tempChat, modelSelection);

@@ -3,13 +3,11 @@ import './instrumentation';
 import formbody from '@fastify/formbody';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
+import { STORY_FRAME_CORS_HEADERS, STORY_FRAME_ORIGIN, STORY_RUNTIME_PATH } from '@nao/shared/story-app';
 import { fastifyTRPCPlugin, FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import fastify, { FastifyReply } from 'fastify';
+import fastify, { FastifyReply, FastifyRequest } from 'fastify';
 import fastifyRawBody from 'fastify-raw-body';
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod';
-import { existsSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
 
 import { env, isCloud } from './env';
 import { AUTOMATION_JOB_NAME, automationHandler } from './handlers/automation.handler';
@@ -29,6 +27,8 @@ import {
 } from './handlers/invitation-cleanup.handler';
 import { LOG_CLEANUP_JOB_NAME, logCleanupHandler, runLogCleanup } from './handlers/log-cleanup.handler';
 import { MCP_QUERY_DATA_CLEANUP_JOB_NAME, mcpQueryDataCleanupHandler } from './handlers/mcp-query-data-cleanup.handler';
+import { STORY_BLOB_CLEANUP_JOB_NAME, storyBlobCleanupHandler } from './handlers/story-blob-cleanup.handler';
+import { STORY_DELIVERY_JOB_NAME, storyDeliveryHandler } from './handlers/story-delivery.handler';
 import { STORY_REFRESH_JOB_NAME, storyRefreshHandler } from './handlers/story-refresh.handler';
 import { flushTelemetry } from './instrumentation';
 import { mcpServerRoutes } from './mcp/routes';
@@ -39,8 +39,10 @@ import { attachmentRoutes } from './routes/attachment';
 import { authRoutes } from './routes/auth';
 import { authErrorRedirectRoutes } from './routes/auth-error-redirect';
 import { automationWebhookRoutes } from './routes/automation-webhook';
+import { backofficeRoutes } from './routes/backoffice';
 import { brandingRoutes } from './routes/branding';
 import { chartRoutes } from './routes/chart';
+import { cliAuthRoutes } from './routes/cli-auth';
 import { deployRoutes } from './routes/deploy';
 import { embedStoryDownloadRoutes } from './routes/embed-story-download';
 import { githubRoutes } from './routes/github';
@@ -49,6 +51,7 @@ import { imageRoutes } from './routes/image';
 import { mapBoundariesRoutes } from './routes/map-boundaries';
 import { mattermostRoutes } from './routes/mattermost';
 import { mcpOAuthRoutes } from './routes/mcp-oauth';
+import { notificationUnsubscribeRoutes } from './routes/notification-unsubscribe';
 import { slackRoutes } from './routes/slack';
 import { ssoRoutes } from './routes/sso';
 import { teamsRoutes } from './routes/teams';
@@ -61,7 +64,7 @@ import { logLicenseStatus } from './services/license-startup';
 import { mattermostService } from './services/mattermost';
 import { pingLicensesServer } from './services/ping';
 import { posthog, PostHogEvent } from './services/posthog';
-import { ensureRecurring, registerJob, startScheduler } from './services/scheduler.service';
+import { ensureRecurring, registerJob, startScheduler, stopScheduler } from './services/scheduler.service';
 import { slackService } from './services/slack';
 import { seedSlackConfigFromEnv } from './services/slack-env-seed';
 import { startWarehouseProvisioningReconciler } from './services/warehouse-provisioning';
@@ -70,12 +73,11 @@ import { createContext } from './trpc/trpc';
 import { BudgetExceededError, HandlerError } from './utils/error';
 import { closeBrowser } from './utils/headless-browser';
 import { logger } from './utils/logger';
-
-// Get the directory of the current module (works in both dev and compiled)
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { drainInFlightRequests, isDraining, trackInFlightRequests } from './utils/request-drain';
+import { FRONTEND_DEV_ORIGIN, staticRoot } from './utils/static-root';
 
 const isDev = env.MODE !== 'prod';
+const HEALTH_PATH = '/api/health';
 // pino-pretty transport uses worker threads and can't be resolved inside a Bun-compiled binary.
 // Unix path: /$bunfs/root/..., Windows path: B:/~BUN/root/...
 const isCompiled = typeof Bun !== 'undefined' && /(\$bunfs|~BUN)/.test(Bun.main);
@@ -104,6 +106,8 @@ export type App = typeof app;
 app.setValidatorCompiler(validatorCompiler);
 app.setSerializerCompiler(serializerCompiler);
 
+trackInFlightRequests(app);
+
 // Map HandlerError to HTTP status code
 app.setErrorHandler((error, request, reply) => {
 	const message = error instanceof Error ? error.message : String(error);
@@ -126,7 +130,7 @@ app.setErrorHandler((error, request, reply) => {
 
 // Log HTTP requests to the database (skip log-polling to avoid self-referential noise)
 app.addHook('onResponse', (request, reply, done) => {
-	if (request.url.includes('log.listLogs')) {
+	if (request.url.includes('log.listLogs') || request.url === HEALTH_PATH) {
 		done();
 		return;
 	}
@@ -185,6 +189,10 @@ app.register(testRoutes, {
 	prefix: '/api/test',
 });
 
+app.register(cliAuthRoutes, {
+	prefix: '/api/cli-auth',
+});
+
 app.register(chartRoutes, {
 	prefix: '/c',
 });
@@ -207,6 +215,10 @@ app.register(authErrorRedirectRoutes, {
 
 app.register(embedStoryDownloadRoutes, {
 	prefix: '/api/embed',
+});
+
+app.register(notificationUnsubscribeRoutes, {
+	prefix: '/api/notifications',
 });
 
 app.register(authRoutes, {
@@ -240,6 +252,13 @@ app.register(whatsappRoutes, {
 app.register(deployRoutes, {
 	prefix: '/api',
 });
+
+if (isCloud && env.NAO_BACKOFFICE_API_KEY) {
+	app.register(backofficeRoutes, {
+		prefix: '/api/backoffice',
+	});
+	logger.info('Cloud backoffice API enabled', { source: 'system' });
+}
 
 app.register(automationWebhookRoutes, {
 	prefix: '/api',
@@ -317,17 +336,13 @@ app.get('/api', async () => {
 	return 'Welcome to the API!';
 });
 
-// Serve frontend static files in production
-// Look for frontend dist in multiple possible locations
-const execDir = dirname(process.execPath); // Directory containing the compiled binary
-const possibleStaticPaths = [
-	join(execDir, 'public'), // Bun compiled: public folder next to binary
-	join(__dirname, 'public'), // When bundled: public folder next to compiled code
-	join(__dirname, '../public'), // Alternative bundled location
-	join(__dirname, '../../frontend/dist'), // Development: relative to backend src
-];
+app.get(HEALTH_PATH, { logLevel: 'silent' }, async (_request, reply) => {
+	if (isDraining()) {
+		return reply.status(503).send({ status: 'draining' });
+	}
+	return { status: 'ok' };
+});
 
-const staticRoot = possibleStaticPaths.find((p) => existsSync(p));
 const isReservedBackendPath = (url: string) => {
 	const pathname = url.split('?', 1)[0];
 	return (
@@ -347,6 +362,20 @@ const isReservedBackendPath = (url: string) => {
 
 console.log('Static root:', staticRoot || 'Not found (API-only mode)');
 
+/** Only the sandboxed custom-story frame (opaque origin) gets CORS access, and only to the story runtime modules. */
+const isStoryFrameRuntimeRequest = (request: FastifyRequest) =>
+	request.headers.origin === STORY_FRAME_ORIGIN && request.url.startsWith(`${STORY_RUNTIME_PATH}/`);
+
+app.addHook('onRequest', async (request, reply) => {
+	if (isStoryFrameRuntimeRequest(request)) {
+		reply.headers(STORY_FRAME_CORS_HEADERS);
+	}
+});
+
+app.options(`${STORY_RUNTIME_PATH}/*`, (_request, reply) => {
+	reply.header('Access-Control-Allow-Methods', 'GET, HEAD').status(204).send();
+});
+
 if (staticRoot) {
 	app.register(fastifyStatic, {
 		root: staticRoot,
@@ -363,7 +392,7 @@ app.setNotFoundHandler((request, reply) => {
 	} else if (staticRoot) {
 		reply.sendFile('index.html');
 	} else if (isDev) {
-		reply.redirect(`http://localhost:3000${request.url}`);
+		reply.redirect(`${FRONTEND_DEV_ORIGIN}${request.url}`);
 	} else {
 		reply.status(404).send({ error: 'Not found' });
 	}
@@ -398,12 +427,20 @@ export const startServer = async (opts: { port: number; host: string }) => {
 
 	registerJob(AUTOMATION_JOB_NAME, automationHandler);
 	registerJob(STORY_REFRESH_JOB_NAME, storyRefreshHandler);
+	registerJob(STORY_DELIVERY_JOB_NAME, storyDeliveryHandler);
 
 	registerJob(MCP_QUERY_DATA_CLEANUP_JOB_NAME, mcpQueryDataCleanupHandler);
 	await ensureRecurring({
 		name: MCP_QUERY_DATA_CLEANUP_JOB_NAME,
 		cron: '0 4 * * *',
 		uniqueKey: MCP_QUERY_DATA_CLEANUP_JOB_NAME,
+	});
+
+	registerJob(STORY_BLOB_CLEANUP_JOB_NAME, storyBlobCleanupHandler);
+	await ensureRecurring({
+		name: STORY_BLOB_CLEANUP_JOB_NAME,
+		cron: '30 4 * * *',
+		uniqueKey: STORY_BLOB_CLEANUP_JOB_NAME,
 	});
 
 	registerJob(CONTEXT_BRANCH_CLEANUP_JOB_NAME, contextBranchCleanupHandler);
@@ -445,8 +482,18 @@ export const startServer = async (opts: { port: number; host: string }) => {
 		process.exit(0);
 	};
 
+	const handleGracefulShutdown = async () => {
+		if (isDraining()) {
+			return;
+		}
+		stopScheduler();
+		await drainInFlightRequests(env.SHUTDOWN_DRAIN_DELAY_MS);
+		await handleShutdown();
+	};
+
+	// SIGINT (Ctrl-C) skips draining so stopping a dev server with an open stream stays instant.
 	process.on('SIGINT', handleShutdown);
-	process.on('SIGTERM', handleShutdown);
+	process.on('SIGTERM', handleGracefulShutdown);
 };
 
 export default app;

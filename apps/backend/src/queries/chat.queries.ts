@@ -514,6 +514,7 @@ export const createChat = async (
 			.values({
 				id: messageId,
 				chatId: savedChat.id,
+				senderUserId: savedChat.userId,
 				role: 'user',
 				source: newUserMessage.source,
 				citation: newUserMessage.citation ?? null,
@@ -579,6 +580,7 @@ export const upsertMessage = async (
 	message: Omit<UIMessage, 'id'> & {
 		id?: string;
 		chatId: string;
+		senderUserId?: string;
 		stopReason?: StopReason;
 		error?: unknown;
 		tokenUsage?: TokenUsage;
@@ -593,6 +595,7 @@ export const upsertMessage = async (
 		const messageValues = {
 			id: messageId,
 			chatId: message.chatId,
+			senderUserId: message.senderUserId,
 			role: message.role,
 			stopReason: message.stopReason,
 			errorMessage: getErrorMessage(message.error),
@@ -929,9 +932,9 @@ const isNotOnboardingChat = () => {
 	)`;
 };
 
-export const getSelectionForksByShareId = async (
+export const getSelectionForksBySourceId = async (
 	userId: string,
-	shareId: string,
+	sourceId: string,
 	forkType: 'chat_selection' | 'story_selection',
 ): Promise<{ chatId: string; selectionStart: number; selectionEnd: number; selectionText: string }[]> => {
 	const typeFilter =
@@ -941,8 +944,8 @@ export const getSelectionForksByShareId = async (
 
 	const idFilter =
 		dbConfig.dialect === Dialect.Postgres
-			? sql`${s.chat.forkMetadata}->>'id' = ${shareId}`
-			: sql`json_extract(${s.chat.forkMetadata}, '$.id') = ${shareId}`;
+			? sql`${s.chat.forkMetadata}->>'id' = ${sourceId}`
+			: sql`json_extract(${s.chat.forkMetadata}, '$.id') = ${sourceId}`;
 
 	const results = await db
 		.select({ id: s.chat.id, forkMetadata: s.chat.forkMetadata })

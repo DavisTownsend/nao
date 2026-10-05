@@ -5,7 +5,7 @@ import { Plus, PencilRuler, Database, Paperclip, AlertTriangle, Shield, Check } 
 import { ATTACHMENT_ACCEPT } from '@nao/shared/attachments';
 import { Button, ChatButton, MicButton } from './ui/button';
 import { SlidingWaveform } from './chat-input-sliding-waveform';
-import { ChatPrompt, STORY_MENTION_ID, DATABASE_MENTION_TRIGGER } from './chat-input-prompt';
+import { ChatPrompt, DATABASE_MENTION_TRIGGER, useStoryMentionOptions } from './chat-input-prompt';
 import { ChatInputModelSelect } from './chat-input-model-select';
 import { ChatInputMessageQueue } from './chat-input-message-queue';
 import { ChatInputAttachmentPreview } from './chat-input-attachment-preview';
@@ -16,8 +16,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import StoryIcon from './ui/story-icon';
-import type { PromptHandle, SelectedMention } from 'prompt-mentions';
+import type { MentionOption, PromptHandle, SelectedMention } from 'prompt-mentions';
 import type { FormEvent } from 'react';
 import type { AgentHelpers } from '@/hooks/use-agent';
 import { ContextWindowRing } from '@/components/ui/chat-input-context-window-ring';
@@ -40,6 +39,7 @@ import { messageQueueStore } from '@/stores/chat-message-queue';
 import { chatInputRestoreStore, useChatInputRestore } from '@/stores/chat-input-restore';
 import { chatPendingCitationStore } from '@/stores/chat-pending-citation';
 import { useChatPendingCitation } from '@/hooks/use-chat-pending-citation';
+import { useEffectiveUserGroupFeatures } from '@/hooks/use-effective-user-group-features';
 import { SelectionCitationBanner } from '@/components/selection-citation-banner';
 import { ChatInputSuggestions } from '@/components/chat-input-suggestions';
 import { runWithStoryBeforeAgentSend, useStoryBeforeAgentSend } from '@/contexts/story-before-agent-send';
@@ -119,6 +119,8 @@ function ChatInputBase({
 	} = useAgentContext();
 	const navigate = useNavigate();
 	const { canChatWithNaoData } = usePermissions();
+	const { storyCreationEnabled } = useEffectiveUserGroupFeatures();
+	const storyMentionOptions = useStoryMentionOptions(storyCreationEnabled);
 	const chatId = useChatId();
 	const storyBeforeAgentSend = useStoryBeforeAgentSend();
 
@@ -309,6 +311,7 @@ function ChatInputBase({
 							end: citationSnapshot.end,
 							text: citationSnapshot.text,
 							storySlug: citationSnapshot.storySlug,
+							block: citationSnapshot.block,
 						}
 					: undefined;
 				if (hasCitation) {
@@ -400,11 +403,16 @@ function ChatInputBase({
 	);
 
 	return (
-		<div ref={dropZoneRef} className={cn('px-3 pb-3 pt-0 md:px-4 md:pb-4 max-w-3xl w-full mx-auto', className)}>
+		<div ref={dropZoneRef} className={cn('px-3 pb-3 pt-0 md:px-3 md:pb-3 max-w-3xl w-full mx-auto', className)}>
 			<ChatInputMessageQueue onEditMessage={handleEditQueuedMessage} onSubmitNow={submitQueuedMessageWithGuard} />
 			<SelectionCitationBanner />
 			<BudgetBanner />
-			{allowQueueing && !isAdminMode && <ChatInputSuggestions isHidden={inputText.trim().length > 0} />}
+			{allowQueueing && !isAdminMode && (
+				<ChatInputSuggestions
+					storyCreationEnabled={storyCreationEnabled}
+					isHidden={inputText.trim().length > 0}
+				/>
+			)}
 			{variant === 'example' ? (
 				<ChatInputExampleBadge />
 			) : variant === 'onboarding' ? (
@@ -417,7 +425,7 @@ function ChatInputBase({
 				<InputGroup
 					htmlFor='chat-input'
 					className={cn(
-						'bg-background dark:bg-background shadow-xs border-none',
+						'bg-background dark:bg-background shadow-xs border-none max-md:rounded-4xl',
 						isDragging && 'ring-2 ring-primary/50 border-primary',
 						isAdminMode && 'ring-4 ring-amber-500/60',
 						variant === 'example' && 'ring-4 ring-blue-500/60',
@@ -437,6 +445,7 @@ function ChatInputBase({
 								? 'Try asking: "Make a pie chart of my sales data."'
 								: effectivePlaceholder
 						}
+						storyCreationEnabled={storyCreationEnabled}
 						onChange={(value) => setInputText(value)}
 						onEnter={(value, mentions) => submitMessage(value, mentions)}
 					/>
@@ -464,11 +473,9 @@ function ChatInputBase({
 								adminModeLocked={adminModeLocked}
 								onSelectAdminMode={handleSelectAdminMode}
 								onAddAttachment={attachmentUpload.openFilePicker}
-								onAddStory={() => {
-									promptRef.current?.appendMention(
-										{ id: STORY_MENTION_ID, label: 'Story mode' },
-										'#',
-									);
+								storyMentions={storyMentionOptions}
+								onAddStory={(mention) => {
+									promptRef.current?.appendMention({ id: mention.id, label: mention.label }, '#');
 								}}
 								onOpenSkills={openSkillsMenu}
 								onOpenDatabase={openDatabaseMenu}
@@ -520,13 +527,12 @@ async function dataUrlToFile(url: string, mediaType: string, name: string): Prom
 	return new File([blob], name, { type: mediaType });
 }
 
-const CHAT_INPUT_BORDER_RADIUS = 18;
 const CHAT_INPUT_BORDER_STROKE = 1;
 
 function ChatInputAnimatedBorder() {
 	const containerRef = useRef<HTMLSpanElement>(null);
 	const gradientId = useId();
-	const [{ width, height }, setSize] = useState({ width: 0, height: 0 });
+	const [{ width, height, radius }, setGeometry] = useState({ width: 0, height: 0, radius: 0 });
 	const [isFocused, setIsFocused] = useState(false);
 
 	useLayoutEffect(() => {
@@ -534,9 +540,15 @@ function ChatInputAnimatedBorder() {
 		if (!element) {
 			return;
 		}
-		const updateSize = () => setSize({ width: element.clientWidth, height: element.clientHeight });
-		updateSize();
-		const observer = new ResizeObserver(updateSize);
+		const updateGeometry = () => {
+			setGeometry({
+				width: element.clientWidth,
+				height: element.clientHeight,
+				radius: readBorderRadius(element.parentElement),
+			});
+		};
+		updateGeometry();
+		const observer = new ResizeObserver(updateGeometry);
 		observer.observe(element);
 		return () => observer.disconnect();
 	}, []);
@@ -565,6 +577,7 @@ function ChatInputAnimatedBorder() {
 
 	const hasSize = width > 0 && height > 0;
 	const inset = CHAT_INPUT_BORDER_STROKE / 2;
+	const strokeRadius = Math.max(radius - inset, 0);
 	const strokeColor = isFocused ? 'var(--primary)' : 'var(--muted-foreground)';
 
 	return (
@@ -591,8 +604,8 @@ function ChatInputAnimatedBorder() {
 						y={inset}
 						width={width - CHAT_INPUT_BORDER_STROKE}
 						height={height - CHAT_INPUT_BORDER_STROKE}
-						rx={CHAT_INPUT_BORDER_RADIUS}
-						ry={CHAT_INPUT_BORDER_RADIUS}
+						rx={strokeRadius}
+						ry={strokeRadius}
 						pathLength={100}
 						stroke={`url(#${gradientId})`}
 						strokeWidth={CHAT_INPUT_BORDER_STROKE}
@@ -602,6 +615,14 @@ function ChatInputAnimatedBorder() {
 			)}
 		</span>
 	);
+}
+
+function readBorderRadius(element: HTMLElement | null): number {
+	if (!element) {
+		return 0;
+	}
+	const radius = parseFloat(getComputedStyle(element).borderTopLeftRadius);
+	return Number.isFinite(radius) ? radius : 0;
 }
 
 function ChatInputAdminBadge() {
@@ -688,6 +709,7 @@ function BudgetBanner() {
 function ChatInputPlusMenu({
 	hasDatabases,
 	hasSkills,
+	storyMentions,
 	canChatWithNaoData,
 	isAdminMode,
 	adminModeLocked,
@@ -700,12 +722,13 @@ function ChatInputPlusMenu({
 }: {
 	hasDatabases: boolean;
 	hasSkills: boolean;
+	storyMentions: MentionOption[];
 	canChatWithNaoData: boolean;
 	isAdminMode: boolean;
 	adminModeLocked: boolean;
 	onSelectAdminMode: () => void;
 	onAddAttachment: () => void;
-	onAddStory: () => void;
+	onAddStory: (mention: MentionOption) => void;
 	onOpenSkills: () => void;
 	onOpenDatabase: () => void;
 	onFocusPrompt: () => void;
@@ -741,10 +764,12 @@ function ChatInputPlusMenu({
 						<span>Database tables</span>
 					</DropdownMenuItem>
 				)}
-				<DropdownMenuItem onSelect={onAddStory}>
-					<StoryIcon className='size-4' />
-					<span>Story mode</span>
-				</DropdownMenuItem>
+				{storyMentions.map((mention) => (
+					<DropdownMenuItem key={mention.id} onSelect={() => onAddStory(mention)}>
+						{mention.icon}
+						<span>{mention.label}</span>
+					</DropdownMenuItem>
+				))}
 				{hasSkills && (
 					<DropdownMenuItem onSelect={onOpenSkills}>
 						<PencilRuler className='size-4' />

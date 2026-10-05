@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ArrowRight, MessageCircle, Folder, GitFork, Globe, Info, TimerIcon, Upload } from 'lucide-react';
 import type { ForkMetadata, UIMessage } from '@nao/backend/chat';
 import type { SelectionData } from '@/components/highlight-bubble';
@@ -14,6 +14,7 @@ import { ChatInput } from '@/components/chat-input';
 import { ChatMessages } from '@/components/chat-messages/chat-messages';
 import { HighlightBubble } from '@/components/highlight-bubble';
 import { SidePanel } from '@/components/side-panel/side-panel';
+import { StoryBlockEditPanel } from '@/components/custom-story/story-block-edit-panel';
 import { MobileHeader } from '@/components/mobile-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -30,6 +31,8 @@ import { usePermissions } from '@/hooks/use-permissions';
 import { trpc } from '@/main';
 import { SelectionProvider } from '@/contexts/text-selection';
 import { chatPendingCitationStore } from '@/stores/chat-pending-citation';
+import { storyBlockEditStore } from '@/stores/story-block-edit';
+import { STORY_BLOCK_EDIT_PANEL_MIN_WIDTH } from '@/lib/side-panel';
 import { useSetChatInputCallback } from '@/contexts/set-chat-input-callback';
 import { useTrackViewDuration } from '@/hooks/use-track-view-duration';
 import { getOnboardingChatIdStorage } from '@/hooks/use-agent';
@@ -65,6 +68,8 @@ function ChatPage() {
 	const router = useRouter();
 	const { chatId } = Route.useParams();
 	const { role, canViewChatReplay } = usePermissions();
+	const config = useQuery(trpc.system.getPublicConfig.queryOptions());
+	const showAutomationLinks = role !== undefined && role !== 'viewer' && config.data?.betaAutomationsEnabled === true;
 	const chat = useChatQuery({ chatId });
 	const { data: session } = useSession();
 	const title = chat.data?.title;
@@ -110,6 +115,8 @@ function ChatPage() {
 	const inputAreaHeight = useHeight(inputAreaRef);
 
 	const sidePanel = useSidePanel({ containerRef, sidePanelRef });
+	const isEditingStoryBlock =
+		useSyncExternalStore(storyBlockEditStore.subscribe, storyBlockEditStore.getSnapshot) !== null;
 	const latestStorySlug = useAgentMessagesSelector(findLatestStorySlug);
 	const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
 	const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
@@ -195,13 +202,13 @@ function ChatPage() {
 										<span className='truncate'>{chatProject.name}</span>
 									</Badge>
 								)}
-								{isAutomationRunning && (
+								{showAutomationLinks && isAutomationRunning && (
 									<Badge variant='secondary' className='gap-1 text-muted-foreground w-fit'>
 										<Spinner className='size-3' />
 										<span>Running...</span>
 									</Badge>
 								)}
-								{automationId && (
+								{showAutomationLinks && automationId && (
 									<Badge variant='outline' className='gap-1 text-muted-foreground w-fit' asChild>
 										<Link to='/automations/$automationId' params={{ automationId }}>
 											<TimerIcon />
@@ -281,7 +288,8 @@ function ChatPage() {
 								<ChatMessages />
 							</>
 						)}
-						<div className='pointer-events-none absolute left-0 right-4 bottom-0 z-10 pt-8'>
+						<StoryBlockEditPanel chatId={chatId} />
+						<div className='pointer-events-none absolute inset-x-0 bottom-0 z-10 pt-8'>
 							<div
 								ref={inputAreaRef}
 								className='pointer-events-auto bg-gradient-to-t from-background via-background via-70% to-transparent'
@@ -298,6 +306,7 @@ function ChatPage() {
 							isAnimating={sidePanel.isAnimating}
 							sidePanelRef={sidePanelRef}
 							resizeHandleRef={sidePanel.resizeHandleRef}
+							chatPanelMinWidth={isEditingStoryBlock ? STORY_BLOCK_EDIT_PANEL_MIN_WIDTH : undefined}
 						>
 							{sidePanel.content}
 						</SidePanel>

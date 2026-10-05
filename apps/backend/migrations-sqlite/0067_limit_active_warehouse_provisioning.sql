@@ -1,1 +1,0 @@
-CREATE UNIQUE INDEX `warehouse_provisioning_job_active_user_idx` ON `warehouse_provisioning_job` (`user_id`) WHERE "warehouse_provisioning_job"."status" NOT IN ('ready', 'failed', 'cancelled');

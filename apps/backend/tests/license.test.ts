@@ -105,12 +105,21 @@ describe('license.service', () => {
 	it('only exposes known features from the license payload', async () => {
 		const { licensePath, publicKeyPem } = await createSignedLicenseFile({
 			...DEFAULT_CLAIMS,
-			features: [LICENSE_FEATURES.sso, LICENSE_FEATURES.excludeColumns, 'unknown-future-feature'],
+			features: [
+				LICENSE_FEATURES.sso,
+				LICENSE_FEATURES.excludeColumns,
+				LICENSE_FEATURES.rowLevelSecurity,
+				'unknown-future-feature',
+			],
 		});
 		setLicenseEnv({ licensePath, publicKeyPem });
 
 		const license = await getLicense();
-		expect(license?.features).toEqual([LICENSE_FEATURES.sso, LICENSE_FEATURES.excludeColumns]);
+		expect(license?.features).toEqual([
+			LICENSE_FEATURES.sso,
+			LICENSE_FEATURES.excludeColumns,
+			LICENSE_FEATURES.rowLevelSecurity,
+		]);
 	});
 
 	it('grants every known feature when the license carries the "*" wildcard', async () => {
@@ -259,6 +268,7 @@ describe('license.service', () => {
 		process.env.BETA_AUTOMATIONS_ENABLED = 'false';
 		process.env.BETA_CONTEXT_RECOMMENDATIONS_ENABLED = 'true';
 		process.env.BETA_STORY_FILTERS_ENABLED = 'true';
+		process.env.BETA_CUSTOM_STORIES_ENABLED = 'true';
 		process.env.SMTP_HOST = 'smtp.example.com';
 		process.env.SMTP_MAIL_FROM = 'hello@example.com';
 		process.env.SMTP_PASSWORD = 'secret';
@@ -285,6 +295,7 @@ describe('license.service', () => {
 				betaAutomationsEnabled: false,
 				betaContextRecommendationsEnabled: true,
 				betaStoryFiltersEnabled: true,
+				betaCustomStoriesEnabled: true,
 				smtpConfigured: true,
 				loginModesConfigured: {
 					google: false,

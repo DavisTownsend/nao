@@ -217,6 +217,7 @@ const insertOrSupersedeMessage = async (opts: {
 		role: 'user',
 		parts: [{ type: 'text', text: message.text }, ...attachmentParts],
 		chatId,
+		senderUserId: userId,
 		source,
 		citation: message.citation,
 		versionGroupId,

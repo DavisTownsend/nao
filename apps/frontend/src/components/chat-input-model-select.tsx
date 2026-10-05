@@ -1,5 +1,5 @@
 import { providerLabel, providerName } from '@nao/shared/types';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useRef, useState } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Settings, TriangleAlert } from 'lucide-react';
 import { useCallback, useEffect } from 'react';
@@ -8,7 +8,7 @@ import type { LlmProvider } from '@nao/shared/types';
 
 import { LlmProviderIcon } from '@/components/ui/llm-provider-icon';
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { SimpleTooltip } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAgentContext } from '@/contexts/agent.provider';
 import { isSameModel, useModelSelection } from '@/hooks/use-model-selection';
 import { usePermissions } from '@/hooks/use-permissions';
@@ -22,6 +22,7 @@ export function ChatInputModelSelect() {
 	const navigate = useNavigate();
 	const { isAdmin } = usePermissions();
 	const { availableModels, selectedModel, setSelectedModel, isPending, canCycleModels } = useModelSelection();
+	const { isTooltipOpen, onTooltipOpenChange, onSelectOpenChange } = useSelectTriggerTooltip();
 
 	const project = useQuery(trpc.project.getCurrent.queryOptions());
 	const isTrial = project.data === null;
@@ -127,24 +128,28 @@ export function ChatInputModelSelect() {
 		<Select
 			value={selectedModel ? `${selectedModel.provider}:${selectedModel.modelId}` : undefined}
 			onValueChange={handleModelValueChange}
+			onOpenChange={onSelectOpenChange}
 		>
-			<SimpleTooltip side='top' content={`Cycle models with ${getShortcutLabel('cycle-model')}`}>
-				<SelectTrigger variant='ghost' className='p-0 gap-1 text-sm' size='sm'>
-					<SelectValue>
-						<div className='flex items-center gap-2'>
-							{selectedModel && (
-								<LlmProviderIcon
-									provider={selectedModel.provider}
-									baseUrl={selectedAvailableModel?.baseUrl}
-									className='size-4'
-								/>
-							)}
-							<span className='leading-none'>{selectedModelName}</span>
-							{selectedModel && <NamedProviderHint provider={selectedModel.provider} />}
-						</div>
-					</SelectValue>
-				</SelectTrigger>
-			</SimpleTooltip>
+			<Tooltip open={isTooltipOpen} onOpenChange={onTooltipOpenChange}>
+				<TooltipTrigger asChild>
+					<SelectTrigger variant='ghost' className='p-0 gap-1 text-sm' size='sm'>
+						<SelectValue>
+							<div className='flex items-center gap-2'>
+								{selectedModel && (
+									<LlmProviderIcon
+										provider={selectedModel.provider}
+										baseUrl={selectedAvailableModel?.baseUrl}
+										className='size-4'
+									/>
+								)}
+								<span className='leading-none'>{selectedModelName}</span>
+								{selectedModel && <NamedProviderHint provider={selectedModel.provider} />}
+							</div>
+						</SelectValue>
+					</SelectTrigger>
+				</TooltipTrigger>
+				<TooltipContent side='top'>Cycle models with {getShortcutLabel('cycle-model')}</TooltipContent>
+			</Tooltip>
 
 			<SelectContent align='center' position='popper' side='top' collisionPadding={12}>
 				{availableModels?.map((model) => (
@@ -171,6 +176,30 @@ export function ChatInputModelSelect() {
 			</SelectContent>
 		</Select>
 	);
+}
+
+/**
+ * Closing the select returns focus to its trigger, which would otherwise open the
+ * tooltip and keep it visible. The open request caused by that focus is skipped.
+ */
+function useSelectTriggerTooltip() {
+	const [isTooltipOpen, setIsTooltipOpen] = useState(false);
+	const skipNextOpenRef = useRef(false);
+
+	const onSelectOpenChange = useCallback((open: boolean) => {
+		setIsTooltipOpen(false);
+		skipNextOpenRef.current = !open;
+	}, []);
+
+	const onTooltipOpenChange = useCallback((open: boolean) => {
+		if (open && skipNextOpenRef.current) {
+			skipNextOpenRef.current = false;
+			return;
+		}
+		setIsTooltipOpen(open);
+	}, []);
+
+	return { isTooltipOpen, onTooltipOpenChange, onSelectOpenChange };
 }
 
 function NamedProviderHint({ provider }: { provider: LlmProvider }) {

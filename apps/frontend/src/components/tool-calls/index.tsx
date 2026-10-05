@@ -19,6 +19,7 @@ import { ReadQueryResultToolCall } from './read-query-result';
 import { RecordRecommendationToolCall } from './record-recommendation';
 import { RequestWarehouseCredentialsToolCall } from './request-warehouse-credentials';
 import { SearchToolCall } from './search';
+import { StrReplaceToolCall } from './str-replace';
 import { TaskToolCall } from './task';
 import { WebFetchToolCall } from './web-fetch';
 import { WebSearchToolCall } from './web-search';
@@ -51,6 +52,7 @@ const toolComponents: Partial<{
 	read_query_result: ReadQueryResultToolCall,
 	request_warehouse_credentials: RequestWarehouseCredentialsToolCall,
 	search: SearchToolCall,
+	str_replace: StrReplaceToolCall,
 	task: TaskToolCall,
 	write: WriteToolCall,
 };

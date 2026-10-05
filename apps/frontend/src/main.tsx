@@ -11,6 +11,7 @@ import { PostHogProvider } from './contexts/posthog.provider';
 import { ThemeProvider } from './contexts/theme.provider';
 import { McpProvider } from './contexts/mcp';
 import { TooltipProvider } from './components/ui/tooltip';
+import { getActiveOrganizationId } from './lib/active-organization';
 import { getProjectRequestHeaders } from './lib/active-project';
 import { routeTree } from './routeTree.gen';
 import reportWebVitals from './reportWebVitals';
@@ -55,7 +56,11 @@ export const trpcClient = createTRPCClient<TrpcRouter>({
 			url: '/api/trpc',
 			transformer: superjson,
 			headers() {
-				return getProjectRequestHeaders();
+				const activeOrganizationId = getActiveOrganizationId();
+				return {
+					...(getProjectRequestHeaders()),
+					...(activeOrganizationId ? { 'x-nao-organization-id': activeOrganizationId } : {}),
+				};
 			},
 		}),
 	],

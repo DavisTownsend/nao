@@ -5,12 +5,14 @@ import { minimatch } from 'minimatch';
 import path from 'path';
 
 import { renderToModelOutput, SearchOutput } from '../../components/tool-outputs';
+import { isDocsProjectPath, isProjectContextPathAllowed } from '../../services/project-context-path-access.service';
 import { isStorageEnabled, relativePathFromKey } from '../../services/storage';
 import { findUserFiles } from '../../services/storage/user-files';
+import { findStoryMountFiles, isCustomStoriesEnabled } from '../../services/story-mount';
 import type { ToolContext } from '../../types/tools';
 import {
-	isWithinProjectFolder,
 	loadNaoignorePatterns,
+	resolveCanonicalProjectPath,
 	STORAGE_MOUNT,
 	toStorageScope,
 	toStorageVirtualPath,
@@ -34,16 +36,26 @@ export default createTool<searchFiles.Input, searchFiles.Output>({
 		// Make pattern recursive if not already
 		const recursivePattern = pattern.startsWith('**/') ? pattern : `**/${pattern}`;
 
-		const [projectFiles, storageFiles] = await Promise.all([
-			searchProjectFolder(recursivePattern, context.projectFolder),
+		const [projectFiles, storageFiles, storyFiles] = await Promise.all([
+			searchProjectFolder(recursivePattern, context),
 			searchStorage(recursivePattern, context),
+			searchStories(recursivePattern, context),
 		]);
 
-		return { _version: '1' as const, files: [...projectFiles, ...storageFiles] };
+		return { _version: '1' as const, files: [...projectFiles, ...storageFiles, ...storyFiles] };
 	},
 
 	toModelOutput: ({ output }) => renderToModelOutput(SearchOutput({ output }), output),
 });
+
+const searchStories = (recursivePattern: string, context: ToolContext): Promise<searchFiles.File[]> => {
+	if (!isCustomStoriesEnabled()) {
+		return Promise.resolve([]);
+	}
+	return findStoryMountFiles(context.chatId, (mountRelativePath) =>
+		minimatch(mountRelativePath, recursivePattern, { dot: true }),
+	);
+};
 
 const searchStorage = async (recursivePattern: string, context: ToolContext): Promise<searchFiles.File[]> => {
 	if (!isStorageEnabled()) {
@@ -65,7 +77,8 @@ const searchStorage = async (recursivePattern: string, context: ToolContext): Pr
 	});
 };
 
-const searchProjectFolder = async (recursivePattern: string, projectFolder: string): Promise<searchFiles.File[]> => {
+const searchProjectFolder = async (recursivePattern: string, context: ToolContext): Promise<searchFiles.File[]> => {
+	const projectFolder = context.projectFolder;
 	// Build ignore patterns from .naoignore
 	const naoignorePatterns = loadNaoignorePatterns(projectFolder);
 	const ignorePatterns = naoignorePatterns.flatMap((ignorePattern) => {
@@ -79,19 +92,34 @@ const searchProjectFolder = async (recursivePattern: string, projectFolder: stri
 		ignore: ignorePatterns,
 	});
 
-	// Filter to only files within the project folder and not in excluded dirs (double-check)
-	const safeFiles = matchedPaths.filter((f) => isWithinProjectFolder(f, projectFolder));
-
-	return Promise.all(
-		safeFiles.map(async (realPath) => {
-			const stats = await fs.stat(realPath);
-			const virtualPath = toVirtualPath(realPath, projectFolder);
-
-			return {
-				path: virtualPath,
-				dir: path.dirname(virtualPath),
-				size: stats.size.toString(),
-			};
+	const files = await Promise.all(
+		matchedPaths.map(async (matchedPath): Promise<searchFiles.File | null> => {
+			try {
+				const virtualPath = toVirtualPath(matchedPath, projectFolder);
+				if (isDocsProjectPath(virtualPath) && (await fs.lstat(matchedPath)).isSymbolicLink()) {
+					return null;
+				}
+				const canonical = resolveCanonicalProjectPath(virtualPath, projectFolder);
+				const stats = await fs.stat(canonical.realPath);
+				if (
+					!isProjectContextPathAllowed(
+						context,
+						virtualPath,
+						canonical.virtualPath,
+						stats.isDirectory() ? 'directory' : 'file',
+					)
+				) {
+					return null;
+				}
+				return {
+					path: virtualPath,
+					dir: path.dirname(virtualPath),
+					size: stats.size.toString(),
+				};
+			} catch {
+				return null;
+			}
 		}),
 	);
+	return files.filter((file): file is searchFiles.File => file !== null);
 };

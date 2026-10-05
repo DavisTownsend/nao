@@ -2,7 +2,7 @@ import type { CustomBoundarySet } from '@nao/shared';
 import { fileExtension } from '@nao/shared/attachments';
 import { markSupersededExecuteSqlParts } from '@nao/shared/execute-sql-parts';
 import { story } from '@nao/shared/tools';
-import type { LlmProvider, LlmSelectedModel } from '@nao/shared/types';
+import type { CitationData, LlmProvider, LlmSelectedModel } from '@nao/shared/types';
 import {
 	convertToModelMessages,
 	createUIMessageStream,
@@ -28,6 +28,7 @@ import { createWebSearchTools } from '../agents/tools/web-search';
 import { getConnections, getTableColumnsContent, getUserRules } from '../agents/user-rules';
 import { ChatForkContextPrompt, MessagingProviderSystemPrompt, SystemPrompt } from '../components/ai';
 import { DBChat } from '../db/abstractSchema';
+import { env } from '../env';
 import { renderToMarkdown } from '../lib/markdown';
 import * as chatQueries from '../queries/chat.queries';
 import * as imageQueries from '../queries/image.queries';
@@ -64,6 +65,7 @@ import {
 	resolveProviderSettings,
 } from '../utils/llm';
 import { logger } from '../utils/logger';
+import { sanitizeToolCallIds } from '../utils/model-message';
 import { extractConfiguredDatabases, readProjectContext } from '../utils/nao-config';
 import { addPromptCache, cachedSystemInstructions } from '../utils/prompt-cache';
 import { scheduleSaveLlmInferenceRecord } from '../utils/schedule-task';
@@ -76,11 +78,20 @@ import { hasFeature, LICENSE_FEATURES } from './license.service';
 import { mcpService } from './mcp';
 import { memoryService } from './memory';
 import { getAzureAccessTokenForUser } from './microsoft-auth.service';
+import { sandboxSecretService } from './sandbox-secret.service';
 import { getProjectRuntimeEnvVars } from './project-runtime-env';
 import { resolveSemanticLayerMode } from './semantic-layer.service';
 import { skillService } from './skill';
+import { isStorageEnabled } from './storage';
 import { canGrepUserFiles } from './storage/user-files';
+import { customStoryAuthoringError } from './story-mount';
 import { getStoryTemplateWarnings } from './story-template-validation';
+import { resolveProjectContextAccess } from './user-group-context-access.service';
+import {
+	type AgentUserGroupAccess,
+	appendAgentUserGroupRestrictions,
+	resolveAgentUserGroupAccess,
+} from './user-group-feature-access.service';
 
 export interface AgentRunResult {
 	text: string;
@@ -104,7 +115,6 @@ export interface AgentRunResult {
 
 export type AgentChat = Pick<DBChat, 'id' | 'projectId' | 'userId'> & {
 	forkMetadata?: ForkMetadata | null;
-	testMode?: boolean;
 };
 
 /** Dependencies a tool resolver receives once a run's context has been resolved. */
@@ -121,37 +131,50 @@ export interface AgentToolsContext {
 /** Builds the tool set a run should expose. Callers pass one to `create` to customise tools. */
 export type AgentToolsResolver = (context: AgentToolsContext) => AgentTools | Promise<AgentTools>;
 
+export function resolveStoryMode(
+	mentions: Mention[] | undefined,
+	access: AgentUserGroupAccess,
+): 'classic' | 'custom' | null {
+	if (!access.features.storyCreation) {
+		return null;
+	}
+	const mentioned = (id: string) => Boolean(mentions?.some((mention) => mention.id === id));
+	if (env.BETA_CUSTOM_STORIES_ENABLED && access.features.customStoryCreation && mentioned(story.CUSTOM_MENTION_ID)) {
+		return 'custom';
+	}
+	return mentioned(story.MENTION_ID) ? 'classic' : null;
+}
+
+const STORY_MODE_INSTRUCTIONS = {
+	classic:
+		'[Story mode: present your response as an interactive nao Story using the story tool (format "classic"), combining markdown and charts]',
+	custom: '[Custom story mode: present your response as a custom story: call the story tool with format "custom" and build the app with @nao/story-kit blocks]',
+} as const;
+
 /** Default tool set for interactive runs: all built-ins, MCP tools and web search. */
-export const defaultAgentTools: AgentToolsResolver = ({
-	chat,
-	agentSettings,
-	toolContext,
-	webTools,
-	customBoundaries,
-}) =>
+export const defaultAgentTools: AgentToolsResolver = ({ agentSettings, toolContext, webTools, customBoundaries }) =>
 	getTools(agentSettings, webTools ?? {}, {
-		testMode: chat.testMode,
 		customBoundaries,
 		semanticLayerMode: toolContext.semanticLayerMode,
+		customStoryAuthoring: customStoryAuthoringError(toolContext.userGroupFeatures) === null,
 	});
 
 /** Default tool set minus the given built-ins — for runs whose surface cannot render them. */
 export const defaultAgentToolsExcluding =
 	(excludeBuiltinTools: string[]): AgentToolsResolver =>
-	({ chat, agentSettings, toolContext, webTools, customBoundaries }) =>
+	({ agentSettings, toolContext, webTools, customBoundaries }) =>
 		getTools(agentSettings, webTools ?? {}, {
-			testMode: chat.testMode,
 			excludeBuiltinTools,
 			customBoundaries,
 			semanticLayerMode: toolContext.semanticLayerMode,
+			customStoryAuthoring: customStoryAuthoringError(toolContext.userGroupFeatures) === null,
 		});
 
-export const onboardingAgentTools: AgentToolsResolver = ({ chat, agentSettings }) =>
+export const onboardingAgentTools: AgentToolsResolver = ({ agentSettings }) =>
 	getTools(
 		agentSettings,
 		{},
 		{
-			testMode: chat.testMode,
 			onboarding: true,
 			builtinToolAllowlist: [
 				'clarification',
@@ -168,12 +191,11 @@ export const onboardingAgentTools: AgentToolsResolver = ({ chat, agentSettings }
  * runs against nao's own app database when `ToolContext.adminMode` is set),
  * plus charting and follow-ups. Excludes the filesystem context tools.
  */
-export const adminAgentTools: AgentToolsResolver = ({ chat, agentSettings }) =>
+export const adminAgentTools: AgentToolsResolver = ({ agentSettings }) =>
 	getTools(
 		agentSettings,
 		{},
 		{
-			testMode: chat.testMode,
 			builtinToolAllowlist: [
 				'execute_sql',
 				'read_query_result',
@@ -209,7 +231,11 @@ export async function buildMcpToolContext(opts: {
 	agentSettings?: AgentSettings | null;
 }): Promise<McpToolContext> {
 	const base = await _buildContextBase({ ...opts, supportsCustomCharts: false });
-	return { ...base, chatId: null };
+	return {
+		...base,
+		chatId: null,
+		storyCreationEnabled: base.userGroupFeatures.includes('storyCreation'),
+	};
 }
 
 async function _buildContextBase(opts: {
@@ -224,9 +250,10 @@ async function _buildContextBase(opts: {
 	}
 	const agentSettings =
 		opts.agentSettings !== undefined ? opts.agentSettings : await projectQueries.getAgentSettings(opts.projectId);
-	const [envVars, azureAccessToken] = await Promise.all([
+	const [envVars, azureAccessToken, contextAccess] = await Promise.all([
 		getProjectRuntimeEnvVars(opts.projectId),
 		hasFeature(LICENSE_FEATURES.sso).then((has) => (has ? getAzureAccessTokenForUser(opts.userId) : null)),
+		resolveProjectContextAccess(opts.projectId, opts.userId, project.path),
 	]);
 	return {
 		projectFolder: project.path,
@@ -236,6 +263,11 @@ async function _buildContextBase(opts: {
 		agentSettings,
 		semanticLayerMode: resolveSemanticLayerMode(project.path, agentSettings),
 		envVars,
+		warehouseTableAccess: contextAccess.warehouseTableAccess,
+		warehouseRowSecurity: contextAccess.warehouseRowSecurity,
+		docsContextAccess: contextAccess.docsContextAccess,
+		userGroupFeatures: contextAccess.userGroupFeatures,
+		userRulesGroupAccess: contextAccess.userRulesGroupAccess,
 		azureAccessToken,
 		queryResults: new Map(),
 		generatedArtifacts: { charts: [], maps: [], stories: [] },
@@ -313,12 +345,12 @@ export class AgentService {
 		});
 		const webTools = await this._resolveWebTools(chat.projectId, resolvedLlmSelectedModel.provider, agentSettings);
 		const resolveTools = options.tools ?? defaultAgentTools;
-		const agentTools = await resolveTools({ chat, agentSettings, toolContext, webTools, customBoundaries });
+		const resolvedTools = await resolveTools({ chat, agentSettings, toolContext, webTools, customBoundaries });
+		const userGroupAccess = resolveAgentUserGroupAccess(toolContext.userGroupFeatures, resolvedTools);
+		const agentTools = resolvedTools;
 		const stopWhen: StopCondition<AgentTools>[] = options.excludeFollowUps
 			? [stepCountIs(options.maxSteps ?? 20)]
-			: chat.testMode
-				? [hasToolCall('suggest_follow_ups')]
-				: [hasToolCall('suggest_follow_ups'), hasToolCall('clarification')];
+			: [hasToolCall('suggest_follow_ups'), hasToolCall('clarification')];
 		const agent = new AgentManager(
 			chat,
 			modelConfig,
@@ -327,6 +359,7 @@ export class AgentService {
 			new AbortController(),
 			agentTools,
 			toolContext,
+			userGroupAccess,
 			stopWhen,
 			options.systemPrompt,
 		);
@@ -410,6 +443,7 @@ class AgentManager {
 		private readonly _abortController: AbortController,
 		private readonly _agentTools: AgentTools,
 		private readonly _toolContext: ToolContext,
+		private readonly _userGroupAccess: AgentUserGroupAccess,
 		stopWhen: StopCondition<AgentTools>[] = [hasToolCall('suggest_follow_ups'), hasToolCall('clarification')],
 		private readonly _systemPromptOverride?: string,
 	) {
@@ -583,6 +617,7 @@ class AgentManager {
 					await chatQueries.upsertMessage({
 						...settledMessage,
 						chatId: this.chat.id,
+						senderUserId: this.chat.userId,
 						source: this._toolContext.adminMode ? 'admin' : settledMessage.source,
 						stopReason,
 						error,
@@ -620,7 +655,9 @@ class AgentManager {
 		const uiMessagesWithCompaction = compactionService.useLastCompaction(uiMessagesWithDbContext);
 		const uiMessagesWithResolvedAttachments = await resolveAttachments(uiMessagesWithCompaction);
 
-		const systemPrompt = this._systemPromptOverride ?? (await this._buildSystemPrompt(provider, timezone, chatUrl));
+		const selectedSystemPrompt =
+			this._systemPromptOverride ?? (await this._buildSystemPrompt(provider, timezone, chatUrl));
+		const systemPrompt = appendAgentUserGroupRestrictions(selectedSystemPrompt, this._userGroupAccess);
 		this._systemPrompt = systemPrompt;
 		const conversationMessages = uiMessagesWithResolvedAttachments.filter((message) => message.role !== 'system');
 
@@ -628,7 +665,7 @@ class AgentManager {
 			tools: this._agentTools,
 		});
 
-		return modelMessages;
+		return sanitizeToolCallIds(modelMessages);
 	}
 
 	private async _buildSystemPrompt(provider?: Provider, timezone?: string, chatUrl?: string): Promise<string> {
@@ -643,7 +680,7 @@ class AgentManager {
 
 	private async _buildDefaultSystemPrompt(provider?: Provider, timezone?: string, chatUrl?: string): Promise<string> {
 		const memories = await memoryService.safeGetUserMemories(this.chat.userId, this.chat.projectId, this.chat.id);
-		const userRules = getUserRules(this._toolContext.projectFolder);
+		const userRules = getUserRules(this._toolContext.projectFolder, this._toolContext.userRulesGroupAccess);
 		const connections = getConnections(this._toolContext.projectFolder);
 		const configuredDatabases = extractConfiguredDatabases(this._toolContext.projectFolder);
 		const { repos, templates, presence: contextPresence } = readProjectContext(this._toolContext.projectFolder);
@@ -652,7 +689,13 @@ class AgentManager {
 		const customCharts = this._toolContext.supportsCustomCharts
 			? listChartPlugins(this._toolContext.projectFolder)
 			: [];
-		const mcpServers = await mcpService.getEnabledServers(this.chat.projectId);
+		const toolNames = Object.keys(this._agentTools);
+		const [mcpServers, sandboxSecrets] = await Promise.all([
+			mcpService.getEnabledServers(this.chat.projectId),
+			toolNames.includes('execute_sandboxed_code')
+				? sandboxSecretService.safeListDefinitions(this.chat.userId, this.chat.projectId)
+				: Promise.resolve([]),
+		]);
 		const basePrompt = renderToMarkdown(
 			SystemPrompt({
 				memories,
@@ -662,14 +705,18 @@ class AgentManager {
 				skills,
 				customCharts,
 				mcpServers,
+				sandboxSecrets,
 				semanticLayerMode: this._toolContext.semanticLayerMode,
 				templates,
 				repoNames,
 				contextPresence,
 				timezone,
-				testMode: this.chat.testMode,
-				toolNames: Object.keys(this._agentTools),
-				options: { canGrepSavedFiles: canGrepUserFiles() },
+				toolNames,
+				options: {
+					savedFilesEnabled: isStorageEnabled(),
+					canGrepSavedFiles: canGrepUserFiles(),
+					customStoriesEnabled: customStoryAuthoringError(this._toolContext.userGroupFeatures) === null,
+				},
 			}),
 		);
 		const renderedPrompt = provider
@@ -944,19 +991,17 @@ class AgentManager {
 			return messages;
 		}
 
-		const { start, end, text: citationText } = lastUserMessage.citation;
-		const context = `[The user is referring to the following text selection (chars ${start}–${end}):\n"${citationText}"]`;
+		const context = describeCitation(lastUserMessage.citation);
 		return this._transformLastUserMessageText(messages, (text) => (text ? `${context}\n\n${text}` : context));
 	}
 
 	private _addStoryMode(messages: UIMessage[], mentions?: Mention[]): UIMessage[] {
-		if (!mentions?.some((m) => m.id === story.MENTION_ID)) {
+		const mode = resolveStoryMode(mentions, this._userGroupAccess);
+		if (!mode) {
 			return messages;
 		}
-
-		const STORY_INSTRUCTION =
-			'[Story mode: present your response as an interactive nao Story using the story tool, combining markdown and charts]';
-		return this._transformLastUserMessageText(messages, (text) => `${STORY_INSTRUCTION}\n\n${text}`);
+		const instruction = STORY_MODE_INSTRUCTIONS[mode];
+		return this._transformLastUserMessageText(messages, (text) => `${instruction}\n\n${text}`);
 	}
 
 	private _addSkills(messages: UIMessage[], mentions?: Mention[]): UIMessage[] {
@@ -991,7 +1036,11 @@ class AgentManager {
 
 		const contextParts: string[] = [];
 		for (const mention of dbMentions) {
-			const content = getTableColumnsContent(this._toolContext.projectFolder, mention.id);
+			const content = getTableColumnsContent(
+				this._toolContext.projectFolder,
+				mention.id,
+				this._toolContext.warehouseTableAccess,
+			);
 			if (content) {
 				contextParts.push(`[Table: ${mention.id}]\n${content}`);
 			}
@@ -1125,6 +1174,15 @@ function describeStoredAttachment(part: { url: string; mediaType: string; filena
 			: '';
 
 	return `[The user attached ${name} (${part.mediaType}) to this message. It is saved at ${part.url}. Its contents are not included here: read that path when you need them.${workbookHint}]`;
+}
+
+function describeCitation({ start, end, text, storySlug, block }: CitationData): string {
+	if (!block) {
+		return `[The user is referring to the following text selection (chars ${start}–${end}):\n"${text}"]`;
+	}
+	const title = block.title ? ` "${block.title}"` : '';
+	const query = block.queryId ? `, reading ${block.queryId}` : '';
+	return `[The user is referring to the ${block.kind} block${title}${query} of the custom story "${storySlug}". Apply their request to that block in the story's source and publish again.]`;
 }
 
 // Singleton instance of the agent service

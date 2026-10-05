@@ -67,8 +67,14 @@ function HomePage() {
 		...trpc.storyShare.list.queryOptions({ projectId: project.data?.id ?? '' }),
 		enabled: isEmptyState && !!project.data?.id,
 	});
-	const favorites = useQuery({ ...trpc.favorite.list.queryOptions(), enabled: isEmptyState });
-	const folderItems = useQuery({ ...trpc.storyFolder.listItems.queryOptions(), enabled: isEmptyState });
+	const favorites = useQuery({
+		...trpc.favorite.list.queryOptions(),
+		enabled: isEmptyState,
+	});
+	const folderItems = useQuery({
+		...trpc.storyFolder.listItems.queryOptions(),
+		enabled: isEmptyState,
+	});
 	const folderTree = useQuery({
 		...trpc.storyFolder.listTree.queryOptions({ archived: false }),
 		enabled: isEmptyState,
@@ -206,7 +212,7 @@ function HomePage() {
 										>
 											{renderStoryGroupHeaders(storyGroups)}
 											{latestStoryItems.map((item, index) => (
-												<div key={item.id} style={{ gridColumn: index + 1, gridRow: 2 }}>
+												<div key={item.storyId} style={{ gridColumn: index + 1, gridRow: 2 }}>
 													<StoryCard item={item} displayMode='grid' showArchived={false} />
 												</div>
 											))}

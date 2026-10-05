@@ -301,7 +301,7 @@ function registerStoryManagementTools(server: McpServer, ctx: McpContext): void 
 				limit,
 			});
 			const result = stories.map((story) =>
-				toStoryListItem(story, { url: storyUrl(story), chatUrl: storyChatUrl(story) }),
+				toStoryListItem(story, { url: storyUrl(story.id), chatUrl: storyChatUrl(story) }),
 			);
 			const output = { stories: result };
 			return {
@@ -318,6 +318,7 @@ function registerStoryManagementTools(server: McpServer, ctx: McpContext): void 
 		inputSchema: { story_id: STORY_ID_INPUT },
 		outputSchema: STORY_OUTPUT_SCHEMA,
 		_meta: uiToolMeta(STORY_APP_URI),
+		errorMessage: (error) => (error instanceof Error ? error.message : 'get_story failed. Please try again.'),
 		handler: async ({ story_id }) => {
 			const story = await resolveStory(story_id, ctx);
 			const version = await fetchLatestStoryVersion(story);
@@ -336,7 +337,7 @@ function registerStoryManagementTools(server: McpServer, ctx: McpContext): void 
 				archived: story.archivedAt !== null,
 				createdAt: story.createdAt,
 				updatedAt: story.updatedAt,
-				url: storyUrl(story),
+				url: storyUrl(story.id),
 				chatUrl: storyChatUrl(story),
 			};
 			return buildStoryMcpResultWithSandbox(output, ctx, version?.code ?? null, story.chatId);
