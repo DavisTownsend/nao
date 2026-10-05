@@ -29,6 +29,7 @@ import {
 	SharingBadge,
 } from '@/components/item-card';
 import { ShareStoryDialog } from '@/components/share-dialog.story';
+import { CustomStoryThumbnail } from '@/components/custom-story-thumbnail';
 import { StoryThumbnail } from '@/components/story-thumbnail';
 import StoryIcon from '@/components/ui/story-icon';
 import { SimpleTooltip } from '@/components/ui/tooltip';
@@ -111,8 +112,7 @@ export function StoryCard({
 	const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
 	const moveHandler = canMove ? onMoveToFolder : undefined;
 
-	const canOpenPinShareDialog =
-		isAdmin && !item.sharedStoryId && item.kind === 'own' && !!item.chatId && !!item.storySlug;
+	const canOpenPinShareDialog = isAdmin && !item.isShared && item.kind === 'own' && !!item.chatId && !!item.storySlug;
 
 	const canSelect =
 		!isViewer &&
@@ -167,7 +167,11 @@ export function StoryCard({
 					onClick={handleCardClick}
 				>
 					<div className={GRID_THUMBNAIL_CLASS}>
-						<StoryThumbnail summary={item.summary} />
+						{item.format === 'custom' ? (
+							<CustomStoryThumbnail />
+						) : (
+							<StoryThumbnail summary={item.summary} />
+						)}
 					</div>
 
 					{!selectionActive && (
@@ -398,9 +402,8 @@ function StoryQuickActions({ item, onRequestPinShare }: { item: StoryItem; onReq
 
 	const certification = useToggleStoryCertification();
 
-	const canOpenPinShareDialog =
-		isAdmin && !item.sharedStoryId && item.kind === 'own' && !!item.chatId && !!item.storySlug;
-	const canTogglePin = isAdmin && !!item.sharedStoryId;
+	const canOpenPinShareDialog = isAdmin && !item.isShared && item.kind === 'own' && !!item.chatId && !!item.storySlug;
+	const canTogglePin = isAdmin && item.isShared;
 	const canInteractWithPin = canTogglePin || canOpenPinShareDialog;
 	const showPinSlot = canInteractWithPin || item.isPinned;
 
@@ -419,8 +422,8 @@ function StoryQuickActions({ item, onRequestPinShare }: { item: StoryItem; onReq
 	function handlePin(e: MouseEvent<HTMLButtonElement>) {
 		e.preventDefault();
 		e.stopPropagation();
-		if (canTogglePin && item.sharedStoryId) {
-			pinMutation.mutate({ sharedStoryId: item.sharedStoryId });
+		if (canTogglePin) {
+			pinMutation.mutate({ storyId: item.storyId });
 			return;
 		}
 		if (canOpenPinShareDialog) {
@@ -583,9 +586,9 @@ function StoryArchiveButton({ item, showArchived }: { item: StoryItem; showArchi
 		}
 		if (item.kind === 'own-standalone') {
 			if (showArchived) {
-				unarchiveStandalone.mutate({ storyId: item.id });
+				unarchiveStandalone.mutate({ storyId: item.storyId });
 			} else {
-				archiveStandalone.mutate({ storyId: item.id });
+				archiveStandalone.mutate({ storyId: item.storyId });
 			}
 			return;
 		}

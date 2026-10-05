@@ -1,4 +1,5 @@
 import { extractQueryIds } from '@nao/shared/story-segments';
+import type { StoryFormat } from '@nao/shared/types';
 import { aliasedTable, and, count, desc, eq, isNull, max, or, type SQL, sql } from 'drizzle-orm';
 
 import s, { type DBSharedStory } from '../db/abstractSchema';
@@ -13,6 +14,7 @@ export type SharedStoryWithLatest = DBSharedStory & {
 	chatId: string | null;
 	slug: string;
 	title: string;
+	format: StoryFormat;
 	code: string;
 	version: number;
 	isLive: boolean;
@@ -72,6 +74,11 @@ export async function createSharedStory(
 
 export async function getSharedStory(id: string): Promise<SharedStoryWithLatest | null> {
 	const [row] = await querySharedStories(eq(s.sharedStory.id, id));
+	return row ?? null;
+}
+
+export async function getSharedStoryByStoryId(storyId: string): Promise<SharedStoryWithLatest | null> {
+	const [row] = await querySharedStories(eq(s.sharedStory.storyId, storyId));
 	return row ?? null;
 }
 
@@ -168,17 +175,6 @@ export async function getSharedStoryInfo(
 		.select({ id: s.sharedStory.id, visibility: s.sharedStory.visibility })
 		.from(s.sharedStory)
 		.where(and(eq(s.sharedStory.storyId, storyId), eq(s.sharedStory.projectId, projectId)))
-		.limit(1)
-		.execute();
-
-	return row ?? null;
-}
-
-export async function getSharedStoryVisibilityById(sharedStoryId: string): Promise<{ visibility: string } | null> {
-	const [row] = await db
-		.select({ visibility: s.sharedStory.visibility })
-		.from(s.sharedStory)
-		.where(eq(s.sharedStory.id, sharedStoryId))
 		.limit(1)
 		.execute();
 
@@ -318,6 +314,7 @@ function querySharedStories(whereCondition: SQL): Promise<SharedStoryWithLatest[
 			chatId: s.story.chatId,
 			slug: s.story.slug,
 			title: s.story.title,
+			format: s.story.format,
 			code: s.storyVersion.code,
 			version: s.storyVersion.version,
 			isLive: s.story.isLive,

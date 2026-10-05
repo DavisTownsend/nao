@@ -11,14 +11,16 @@ import * as storyQueries from '../queries/story.queries';
 import * as storyDeliveryQueries from '../queries/story-delivery.queries';
 import * as userQueries from '../queries/user.queries';
 import { hasProjectCloudBillingAccess } from '../services/cloud-billing-access.service';
+import { renderCustomStoryPdf } from '../services/custom-story-export';
 import { refreshStoryData } from '../services/live-story';
 import { NotificationChannelDeliveryError, notifyUsers } from '../services/notification.service';
 import { resolveDeliveryRecipientUserIds } from '../services/story-recipients';
+import type { EmailAttachment } from '../types/email';
 import type { ChannelDeliveryAttempt } from '../types/notification';
 import { withKeyedLock } from '../utils/keyed-lock';
 import { logger } from '../utils/logger';
 import { buildStoryEmailHtml, buildStoryPdfAttachment } from '../utils/story-email';
-import { sharedStoryPath, standaloneStoryPath } from '../utils/story-links';
+import { storyPath } from '../utils/story-links';
 
 export const STORY_DELIVERY_JOB_NAME = 'story.deliver';
 
@@ -135,10 +137,14 @@ async function deliver(
 
 	const ownerId = story.userId ?? (await storyQueries.getStoryOwnerId(story.id)) ?? null;
 	const ownerName = ownerId ? await userQueries.getUserName(ownerId) : null;
-	const linkUrl = await resolveStoryLink(story.id, projectId, ownerId, recipientUserIds);
+	await ensureRecipientsCanOpenStory(story.id, projectId, ownerId, recipientUserIds);
+	const linkUrl = storyPath(story.id);
+	const isCustom = story.format === 'custom';
 	const [attachments, storyEmail] = await Promise.all([
-		buildStoryPdfAttachment(version.title, version.code, queryData, projectId),
-		buildStoryEmailHtml(version.title, version.code, queryData, projectId),
+		isCustom
+			? buildCustomStoryPdfAttachment(story, queryData, projectId)
+			: buildStoryPdfAttachment(version.title, version.code, queryData, projectId),
+		isCustom ? undefined : buildStoryEmailHtml(version.title, version.code, queryData, projectId),
 	]);
 
 	const payload: StoryRefreshNotificationPayload = {
@@ -175,25 +181,42 @@ async function deliver(
 	});
 }
 
-async function resolveStoryLink(
+async function buildCustomStoryPdfAttachment(
+	story: DBStory,
+	queryData: StoryQueryData,
+	projectId: string,
+): Promise<EmailAttachment[]> {
+	try {
+		const { filename, buffer } = await renderCustomStoryPdf(story.chatId!, story.slug, queryData);
+		return [{ filename, content: buffer, contentType: 'application/pdf' }];
+	} catch (error) {
+		logger.error(`Failed to build custom story PDF attachment: ${String(error)}`, {
+			source: 'system',
+			projectId,
+			context: { storyId: story.id },
+		});
+		return [];
+	}
+}
+
+async function ensureRecipientsCanOpenStory(
 	storyId: string,
 	projectId: string,
 	ownerId: string | null,
 	recipientUserIds: string[],
-): Promise<string> {
+): Promise<void> {
 	const access = await sharedStoryQueries.getStoryShareAccess(storyId, projectId);
 	if (access) {
 		await grantShareAccessToRecipients(access, recipientUserIds);
-		return sharedStoryPath(access.shareId);
+		return;
 	}
 	if (!ownerId) {
-		return standaloneStoryPath(storyId);
+		return;
 	}
-	const shared = await sharedStoryQueries.createSharedStory(
+	await sharedStoryQueries.createSharedStory(
 		{ storyId, projectId, userId: ownerId, visibility: 'specific' },
 		{ userIds: recipientUserIds },
 	);
-	return sharedStoryPath(shared.id);
 }
 
 async function grantShareAccessToRecipients(

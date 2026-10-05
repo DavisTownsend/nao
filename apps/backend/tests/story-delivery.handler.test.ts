@@ -54,7 +54,7 @@ vi.mock('../src/utils/story-email', () => ({
 	buildStoryPdfAttachment: vi.fn(async () => []),
 }));
 vi.mock('../src/utils/story-links', () => ({
-	sharedStoryPath: vi.fn(() => '/shared/share-id'),
+	storyPath: vi.fn(() => '/stories/story-id'),
 }));
 
 import { runScheduledStoryDelivery } from '../src/handlers/story-delivery.handler';

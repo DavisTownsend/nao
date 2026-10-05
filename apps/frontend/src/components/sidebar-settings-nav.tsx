@@ -42,14 +42,9 @@ const settingsNavGroups: NavGroup[] = [
 				exact: true,
 			},
 			{
-				label: 'Team',
-				to: '/settings/project/team',
-				visible: ({ isViewer }) => !isViewer,
-			},
-			{
-				label: 'User Groups',
+				label: 'Users & Groups',
 				to: '/settings/project/user-groups',
-				visible: ({ isAdmin }) => isAdmin,
+				visible: ({ isViewer }) => !isViewer,
 			},
 			{
 				label: 'Agent',
@@ -180,7 +175,7 @@ export function SidebarSettingsNav({
 	const [query, setQuery] = useState('');
 	const [isSearchFocused, setIsSearchFocused] = useState(false);
 
-	const navContext = {
+	const navContext: NavContext = {
 		isAdmin,
 		isCloudBillingEnabled,
 		isContextAdmin,

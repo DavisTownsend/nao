@@ -89,6 +89,7 @@ vi.mock('../src/utils/schedule-task', () => ({
 vi.mock('../src/utils/story-query-data', () => ({
 	backfillMissingQueryData: mocks.backfillMissingQueryData,
 	findMissingQueryIds: mocks.findMissingQueryIds,
+	extractCustomStoryQueryIds: () => new Set<string>(),
 }));
 
 import { assertProjectCloudBillingAccess } from '../src/services/cloud-billing-access.service';
@@ -121,6 +122,7 @@ describe('live story SQL execution', () => {
 		mocks.getLatestVersionByChatAndSlug.mockResolvedValue({
 			code: '<table query_id="query_admin" />',
 			isLiveTextDynamic: false,
+			format: 'classic',
 		});
 		mocks.getSqlQueriesByIds.mockResolvedValue({});
 		mocks.buildToolContext.mockImplementation(async () => ({
@@ -199,6 +201,7 @@ describe('live story SQL execution', () => {
 					data: [{ chat_id: 'chat-1' }],
 				},
 			},
+			narratives: {},
 		});
 
 		expect(mocks.buildToolContext).not.toHaveBeenCalled();
@@ -214,6 +217,7 @@ describe('live story SQL execution', () => {
 			{
 				query_admin: querySource('SELECT * FROM v_messages', null, true),
 			},
+			{},
 		);
 	});
 
@@ -222,6 +226,7 @@ describe('live story SQL execution', () => {
 		mocks.getLatestVersionByChatAndSlug.mockResolvedValue({
 			code,
 			isLiveTextDynamic: false,
+			format: 'classic',
 		});
 		mocks.getSqlQueriesFromCode.mockResolvedValue({
 			query_warehouse: {
@@ -277,12 +282,13 @@ describe('live story SQL execution', () => {
 			{
 				query_warehouse: querySource('SELECT * FROM orders', 'analytics'),
 			},
+			{},
 		);
 	});
 
 	it('refreshes a local query in DuckDB after re-running the warehouse query it reads from', async () => {
 		const code = '<chart query_id="query_local" />';
-		mocks.getLatestVersionByChatAndSlug.mockResolvedValue({ code, isLiveTextDynamic: false });
+		mocks.getLatestVersionByChatAndSlug.mockResolvedValue({ code, isLiveTextDynamic: false, format: 'classic' });
 		mocks.getSqlQueriesFromCode.mockResolvedValue({
 			query_local: {
 				sqlQuery: 'SELECT region, sum(amount) AS total FROM query_upstream GROUP BY region',
@@ -321,6 +327,7 @@ describe('live story SQL execution', () => {
 					data: [{ region: 'EU', total: 10, upstream_seen: true }],
 				},
 			},
+			narratives: {},
 		});
 
 		expect(mocks.getSqlQueriesByIds).toHaveBeenCalledWith('chat-1', new Set(['query_upstream']));

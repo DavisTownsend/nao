@@ -46,6 +46,8 @@ export const NOTIFICATION_CATEGORY_DESCRIPTIONS: Record<NotificationCategory, st
 
 export type SharedItemLabel = 'story' | 'chat';
 
+export type ShareSource = { type: 'chat'; shareId: string } | { type: 'story'; storyId: string };
+
 export type FeedbackNotificationPayload = {
 	kind: 'feedback';
 	vote: 'up' | 'down';
@@ -77,8 +79,6 @@ export type StorySubscriptionNotificationPayload = {
 	storyId: string;
 	storyTitle: string;
 	ownerName: string;
-	/** Share id used to render the live story (charts, tables, maps) as a preview in the notification card. */
-	shareId: string | null;
 };
 
 export const DEFAULT_PYTHON_EXECUTION_DURATION_SECS = 30;
@@ -257,6 +257,7 @@ export type FileTreeEntry = {
 	path: string;
 	type: 'file' | 'directory';
 	children?: FileTreeEntry[];
+	readOnly?: boolean;
 };
 
 export type ContextGitUnavailableReason =
@@ -361,6 +362,15 @@ export type FolderVisibility = (typeof FOLDER_VISIBILITY)[number];
 export const FOLDER_SYSTEM_TYPE = ['private_folder', 'shared_with_me'] as const;
 export type FolderSystemType = (typeof FOLDER_SYSTEM_TYPE)[number];
 
+export const STORY_ACTIONS = ['create', 'update', 'replace', 'publish'] as const;
+export type StoryAction = (typeof STORY_ACTIONS)[number];
+
+export const STORY_SOURCES = ['assistant', 'user'] as const;
+export type StorySource = (typeof STORY_SOURCES)[number];
+
+export const STORY_FORMATS = ['classic', 'custom'] as const;
+export type StoryFormat = (typeof STORY_FORMATS)[number];
+
 export type ProjectChatReplayFacets<R extends string = string> = {
 	userNames: string[];
 	userNameCounts: Record<string, number>;
@@ -420,6 +430,13 @@ export interface CitationData {
 	end: number;
 	text: string;
 	storySlug?: string;
+	block?: StoryBlockReference;
+}
+
+export interface StoryBlockReference {
+	kind: string;
+	title?: string;
+	queryId?: string;
 }
 
 export type MessageBubble = { role: 'user' | 'assistant'; charCount: number };
