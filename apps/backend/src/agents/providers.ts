@@ -470,6 +470,10 @@ function resolveThinking(
 
 	switch (kind) {
 		case 'openai':
+			return resolveEffortThinking(effort, (e) => ({
+				reasoningEffort: (capabilities?.effortMap ?? EFFORT_TO_OPENAI)[e],
+				forceReasoning: true,
+			}));
 		case 'azure':
 			return resolveEffortThinking(effort, (e) => ({
 				reasoningEffort: (capabilities?.effortMap ?? EFFORT_TO_OPENAI)[e],
