@@ -6,8 +6,8 @@ import path from 'node:path';
 import { SignJWT } from 'jose';
 
 import { env } from '../env';
-import { getGitOAuthCredential, runGitWithOAuthAsync } from '../utils/git-oauth';
 import { NAO_CO_AUTHOR } from '../utils/git-identity';
+import { getGitOAuthCredential, runGitWithOAuthAsync } from '../utils/git-oauth';
 
 const GITHUB_API = 'https://api.github.com';
 
