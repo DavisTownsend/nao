@@ -32,7 +32,7 @@ import { LOG_CLEANUP_JOB_NAME, logCleanupHandler, runLogCleanup } from './handle
 import { MCP_QUERY_DATA_CLEANUP_JOB_NAME, mcpQueryDataCleanupHandler } from './handlers/mcp-query-data-cleanup.handler';
 import { STORY_DELIVERY_JOB_NAME, storyDeliveryHandler } from './handlers/story-delivery.handler';
 import { STORY_REFRESH_JOB_NAME, storyRefreshHandler } from './handlers/story-refresh.handler';
-import { STRIPE_WEBHOOK_JOB_NAME, stripeWebhookHandler } from './handlers/stripe-webhook.handler';
+import { STRIPE_WEBHOOK_PROCESS_JOB_NAME, stripeWebhookProcessHandler } from './handlers/stripe-webhook.handler';
 import { flushTelemetry } from './instrumentation';
 import { mcpServerRoutes } from './mcp/routes';
 import { ensureOrganizationSetup } from './queries/organization.queries';
@@ -435,7 +435,8 @@ export const startServer = async (opts: { port: number; host: string }) => {
 	registerJob(STORY_REFRESH_JOB_NAME, storyRefreshHandler);
 	registerJob(STORY_DELIVERY_JOB_NAME, storyDeliveryHandler);
 	if (isCloudBillingEnabled()) {
-		registerJob(STRIPE_WEBHOOK_JOB_NAME, stripeWebhookHandler);
+		// Process accepted webhooks in the background so Stripe receives an immediate response.
+		registerJob(STRIPE_WEBHOOK_PROCESS_JOB_NAME, stripeWebhookProcessHandler);
 		registerJob(BILLING_LIFECYCLE_JOB_NAME, billingLifecycleHandler);
 		await ensureRecurring({
 			name: BILLING_LIFECYCLE_JOB_NAME,

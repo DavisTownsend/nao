@@ -15,7 +15,7 @@ export function isTerminalBillingStatus(status: string | null | undefined): bool
 	return status === 'canceled' || status === 'incomplete_expired';
 }
 
-export const STRIPE_WEBHOOK_JOB_NAME = 'stripe.webhook';
+export const STRIPE_WEBHOOK_PROCESS_JOB_NAME = 'stripe.webhook.process';
 
 export const CLOUD_MONTHLY_PLAN = {
 	key: 'cloud_monthly_v2',

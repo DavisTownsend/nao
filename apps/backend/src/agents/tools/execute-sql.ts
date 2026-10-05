@@ -9,7 +9,6 @@ import {
 	getExecuteSqlPartByQueryIdInChat,
 	updateExecuteSqlPart,
 } from '../../queries/execute-sql.queries';
-import { assertProjectCloudBillingAccess } from '../../services/cloud-billing-access.service';
 import { resolveExcludedColumnEnforcement } from '../../services/excluded-columns.service';
 import { runQueryOnLocalFiles } from '../../services/local-query.service';
 import { isWarehouseSqlEnabled } from '../../services/semantic-layer.service';
@@ -29,7 +28,6 @@ export async function executeQuery(
 	context: ToolContext,
 	options: ExecuteQueryOptions = {},
 ): Promise<executeSql.Output> {
-	await assertProjectCloudBillingAccess(context.projectId);
 	if (!options.compiledBySemanticLayer) {
 		assertWarehouseSqlAllowed(database_id, context);
 	}

@@ -52,6 +52,13 @@ const cloudBillingMemberProcedure = cloudBillingProcedure.use(async ({ ctx, next
 	});
 });
 
+const cloudBillingAdminProcedure = cloudBillingMemberProcedure.use(async ({ ctx, next }) => {
+	if (ctx.orgRole !== 'admin') {
+		throw new TRPCError({ code: 'FORBIDDEN', message: 'Only organization admins can manage billing' });
+	}
+	return next({ ctx });
+});
+
 const cloudBillingAccessProcedure = cloudBillingProcedure.use(async ({ ctx, next }) => {
 	const membership = await resolveOrganizationMembership(
 		ctx.user.id,
@@ -65,13 +72,6 @@ const cloudBillingAccessProcedure = cloudBillingProcedure.use(async ({ ctx, next
 			orgRole: membership.role,
 		},
 	});
-});
-
-const cloudBillingAdminProcedure = cloudBillingMemberProcedure.use(async ({ ctx, next }) => {
-	if (ctx.orgRole !== 'admin') {
-		throw new TRPCError({ code: 'FORBIDDEN', message: 'Only organization admins can manage billing' });
-	}
-	return next({ ctx });
 });
 
 const requestInput = z.object({ requestId: z.uuid() });

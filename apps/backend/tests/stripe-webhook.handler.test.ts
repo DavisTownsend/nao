@@ -26,9 +26,9 @@ vi.mock('../src/services/stripe.service', () => ({
 	getStripeEvent: mocks.getEvent,
 }));
 
-import { stripeWebhookHandler } from '../src/handlers/stripe-webhook.handler';
+import { stripeWebhookProcessHandler } from '../src/handlers/stripe-webhook.handler';
 
-describe('stripeWebhookHandler', () => {
+describe('stripeWebhookProcessHandler', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mocks.getInboxEvent.mockResolvedValue({
@@ -44,7 +44,7 @@ describe('stripeWebhookHandler', () => {
 	it('does not process an inbox event twice', async () => {
 		mocks.getInboxEvent.mockResolvedValue({ id: 'evt_123', processedAt: new Date() });
 
-		await stripeWebhookHandler({ eventId: 'evt_123' }, {} as never);
+		await stripeWebhookProcessHandler({ eventId: 'evt_123' }, {} as never);
 
 		expect(mocks.getEvent).not.toHaveBeenCalled();
 		expect(mocks.reconcileCustomer).not.toHaveBeenCalled();
@@ -70,7 +70,7 @@ describe('stripeWebhookHandler', () => {
 			},
 			subscription,
 		});
-		await stripeWebhookHandler({ eventId: 'evt_123' }, {} as never);
+		await stripeWebhookProcessHandler({ eventId: 'evt_123' }, {} as never);
 
 		expect(mocks.reconcileCustomer).toHaveBeenCalledWith({
 			stripeCustomerId: 'cus_cloud',
@@ -85,7 +85,7 @@ describe('stripeWebhookHandler', () => {
 			data: { object: { id: 'cs_topup', mode: 'payment', metadata: {} } },
 		});
 
-		await stripeWebhookHandler({ eventId: 'evt_123' }, {} as never);
+		await stripeWebhookProcessHandler({ eventId: 'evt_123' }, {} as never);
 
 		expect(mocks.getCheckoutSubscription).not.toHaveBeenCalled();
 		expect(mocks.markProcessed).toHaveBeenCalledWith('evt_123');
@@ -104,7 +104,7 @@ describe('stripeWebhookHandler', () => {
 			},
 		});
 
-		await stripeWebhookHandler({ eventId: 'evt_123' }, {} as never);
+		await stripeWebhookProcessHandler({ eventId: 'evt_123' }, {} as never);
 
 		expect(mocks.reconcileCustomer).toHaveBeenCalledWith({
 			stripeCustomerId: 'cus_cloud',
@@ -118,7 +118,7 @@ describe('stripeWebhookHandler', () => {
 			type: 'customer.updated',
 			data: { object: { id: 'cus_cloud' } },
 		});
-		await stripeWebhookHandler({ eventId: 'evt_123' }, {} as never);
+		await stripeWebhookProcessHandler({ eventId: 'evt_123' }, {} as never);
 
 		expect(mocks.reconcileCustomer).toHaveBeenCalledWith({ stripeCustomerId: 'cus_cloud' });
 		expect(mocks.markProcessed).toHaveBeenCalledWith('evt_123');

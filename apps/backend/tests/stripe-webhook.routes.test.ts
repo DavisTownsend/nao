@@ -104,7 +104,7 @@ describe('Stripe webhook route', () => {
 			livemode: false,
 		});
 		expect(testMocks.enqueueOnce).toHaveBeenCalledWith({
-			name: 'stripe.webhook',
+			name: 'stripe.webhook.process',
 			payload: { eventId: 'evt_123' },
 			uniqueKey: 'stripe-event:evt_123',
 			maxAttempts: 10,

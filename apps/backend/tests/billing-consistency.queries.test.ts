@@ -89,7 +89,7 @@ describe('billing consistency queries', () => {
 		await db.insert(s.scheduledJob).values([
 			{
 				id: 'failed-stripe-job',
-				name: 'stripe.webhook',
+				name: 'stripe.webhook.process',
 				payload: { eventId: 'evt_failed' },
 				runAt: new Date(0),
 				status: 'failed',
@@ -98,7 +98,7 @@ describe('billing consistency queries', () => {
 			},
 			{
 				id: 'pending-stripe-job',
-				name: 'stripe.webhook',
+				name: 'stripe.webhook.process',
 				payload: { eventId: 'evt_pending' },
 				runAt: new Date(0),
 				status: 'pending',
@@ -109,7 +109,7 @@ describe('billing consistency queries', () => {
 
 		await expect(
 			enqueueOnceJob({
-				name: 'stripe.webhook',
+				name: 'stripe.webhook.process',
 				payload: { eventId: 'evt_failed' },
 				uniqueKey: 'stripe-event:evt_failed',
 				maxAttempts: 10,
@@ -117,7 +117,7 @@ describe('billing consistency queries', () => {
 		).resolves.toMatchObject({ status: 'pending', attempts: 0, lastError: null });
 		await expect(
 			enqueueOnceJob({
-				name: 'stripe.webhook',
+				name: 'stripe.webhook.process',
 				payload: { eventId: 'evt_replacement' },
 				uniqueKey: 'stripe-event:evt_pending',
 			}),

@@ -4,9 +4,9 @@ import * as billingQueries from '../queries/billing.queries';
 import { reconcileCloudBillingCustomer } from '../services/billing-reconciliation.service';
 import type { JobHandler } from '../services/scheduler.service';
 import { getCloudCheckoutSubscription, getCloudSubscription, getStripeEvent } from '../services/stripe.service';
-import { CLOUD_MONTHLY_PLAN, STRIPE_WEBHOOK_JOB_NAME } from '../types/billing';
+import { CLOUD_MONTHLY_PLAN, STRIPE_WEBHOOK_PROCESS_JOB_NAME } from '../types/billing';
 
-export { STRIPE_WEBHOOK_JOB_NAME };
+export { STRIPE_WEBHOOK_PROCESS_JOB_NAME };
 
 const SUBSCRIPTION_EVENTS = new Set([
 	'customer.subscription.created',
@@ -30,7 +30,7 @@ const PAYMENT_METHOD_EVENTS = new Set([
 	'payment_method.updated',
 ]);
 
-export const stripeWebhookHandler: JobHandler<{ eventId?: unknown }> = async (payload) => {
+export const stripeWebhookProcessHandler: JobHandler<{ eventId?: unknown }> = async (payload) => {
 	if (typeof payload.eventId !== 'string') {
 		throw new Error('Stripe webhook job is missing eventId');
 	}
