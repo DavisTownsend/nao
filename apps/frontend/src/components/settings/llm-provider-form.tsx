@@ -136,6 +136,12 @@ export function LlmProviderForm({
 
 	const isCustomModel = (modelId: string) => !currentModels.some((m) => m.id === modelId);
 
+	const saveProviderIfEditing = () => {
+		if (isEditing) {
+			void form.handleSubmit();
+		}
+	};
+
 	const addCustomModel = () => {
 		const trimmed = customModelInput.trim();
 		if (!trimmed) {
@@ -541,6 +547,7 @@ export function LlmProviderForm({
 								form.setFieldValue('enabledModels', next.enabledModels);
 							}
 							field.handleChange(next.modelSettings);
+							saveProviderIfEditing();
 						}}
 					/>
 				);

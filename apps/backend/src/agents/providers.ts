@@ -29,6 +29,7 @@ import type {
 	ProviderSettings,
 	ReasoningEffort,
 } from '../types/llm';
+import { withProgressUpdates } from './anthropic-progress-updates';
 import {
 	DEFAULT_TEMPERATURE_MAX,
 	EFFORT_OPTIONS,
@@ -57,7 +58,7 @@ export const CACHE_5M = { type: 'ephemeral' } as const;
 export const LLM_PROVIDERS: LlmProvidersType = {
 	anthropic: {
 		...PROVIDER_META.anthropic,
-		create: (settings, modelId) => createAnthropic(settings).chat(modelId),
+		create: (settings, modelId) => withProgressUpdates(createAnthropic(settings).chat(modelId)),
 		defaultOptions: {
 			disableParallelToolUse: false,
 			contextManagement: {
@@ -325,12 +326,8 @@ function resolveDefaultOptions(provider: LlmProvider, modelId: string, defaultOp
 function resolveInferenceOptions(
 	provider: LlmProvider,
 	modelId: string,
-	settings?: ModelInferenceSettings,
+	settings: ModelInferenceSettings = {},
 ): { callSettings?: ModelCallSettings; providerOverrides?: Record<string, unknown> } {
-	if (!settings) {
-		return {};
-	}
-
 	const capabilities = getModelCapabilities(provider, modelId);
 	const thinking = resolveThinking(provider, modelId, capabilities, settings);
 	const extraOverrides = resolveExtraOptions(provider, modelId, capabilities, settings);
@@ -467,13 +464,7 @@ function resolveThinking(
 					(e) => ({ reasoningConfig: { type: 'adaptive', maxReasoningEffort: EFFORT_TO_BEDROCK[e] } }),
 					(b) => ({ reasoningConfig: { type: 'enabled', budgetTokens: b } }),
 				)
-			: resolveClaudeThinking(
-					capabilities,
-					effort,
-					settings,
-					(e) => ({ thinking: { type: 'adaptive' }, effort: EFFORT_TO_ANTHROPIC[e] }),
-					(b) => ({ thinking: { type: 'enabled', budgetTokens: b } }),
-				);
+			: resolveAnthropicThinking(capabilities, effort, settings);
 	}
 
 	switch (kind) {
@@ -515,6 +506,30 @@ function resolveQwenThinking(
 		providerOverrides: { enable_thinking: true, thinking_budget: settings.thinkingBudgetTokens },
 		thinkingActive: true,
 	};
+}
+
+/**
+ * Direct Anthropic API. The thinking display is the admin's choice, else the model's default
+ * (`updates` on models that hide thinking text); models that always think receive it even with
+ * effort off.
+ */
+function resolveAnthropicThinking(
+	capabilities: ModelCapabilities | undefined,
+	effort: ActiveEffort | undefined,
+	settings: ModelInferenceSettings,
+): ThinkingResult {
+	const display = settings.thinkingDisplay ?? capabilities?.thinkingDisplay;
+	const adaptive = { type: 'adaptive', ...(display && { display }) };
+	if (capabilities?.thinking === 'adaptive' && !effort && capabilities.thinkingAlwaysOn) {
+		return { providerOverrides: { thinking: adaptive }, thinkingActive: true };
+	}
+	return resolveClaudeThinking(
+		capabilities,
+		effort,
+		settings,
+		(e) => ({ thinking: adaptive, effort: EFFORT_TO_ANTHROPIC[e] }),
+		(b) => ({ thinking: { type: 'enabled', budgetTokens: b } }),
+	);
 }
 
 function resolveClaudeThinking(
@@ -585,7 +600,7 @@ function resolveExtraOptions(
 	const overrides: Record<string, unknown> = {};
 	for (const key of extraParams) {
 		const value = settings[key];
-		if (value === undefined) {
+		if (value === undefined || key === 'thinkingDisplay') {
 			continue;
 		}
 		if (key === 'parallelToolCalls' && isAnthropicApiModel(provider, modelId)) {
