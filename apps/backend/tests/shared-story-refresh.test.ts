@@ -121,6 +121,38 @@ describe('shared Story manual refresh', () => {
 		expect(mocks.getSharedStory).not.toHaveBeenCalled();
 	});
 
+	it.each([
+		['owner', 'owner-1', true],
+		['member', 'member-1', false],
+	] as const)(
+		'defers the refresh after a failure only when the %s can retry it',
+		async (_label, userId, expected) => {
+			mocks.getLatestStoryRefreshFailure.mockResolvedValue({
+				errorMessage: 'No output generated.',
+				failedAt: new Date('2026-09-12T10:00:00.000Z'),
+			});
+
+			await createCaller(userId).storyShare.get({ storyId: 'story-1' });
+
+			expect(mocks.getStoryQueryData).toHaveBeenCalledWith('chat-1', 'orders', undefined, true, null, {
+				deferRefresh: expected,
+				deferFirstRefresh: expected,
+			});
+		},
+	);
+
+	it.each([
+		['owner', 'owner-1', true],
+		['member', 'member-1', false],
+	] as const)('defers the first refresh only when the %s can run it', async (_label, userId, expected) => {
+		await createCaller(userId).storyShare.get({ storyId: 'story-1' });
+
+		expect(mocks.getStoryQueryData).toHaveBeenCalledWith('chat-1', 'orders', undefined, true, null, {
+			deferRefresh: false,
+			deferFirstRefresh: expected,
+		});
+	});
+
 	it('resolves fork permission against the shared Story project', async () => {
 		mocks.resolveUserGroupAccess.mockResolvedValue(createEffectiveUserGroupAccess(['storyCreation']));
 

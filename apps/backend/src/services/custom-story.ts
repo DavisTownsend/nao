@@ -28,6 +28,13 @@ export interface CustomStoryVersionView {
 	isLive: boolean;
 	cachedAt: Date | null;
 	lastRefreshFailure: { errorMessage: string; failedAt: Date } | null;
+	/** The story is live but was never cached: its viewer serves the chat's data and refreshes in the background. */
+	needsRefresh: boolean;
+}
+
+interface CustomStoryDataOptions {
+	/** Serve the chat's stored data for a story that was never cached, instead of refreshing inline. */
+	deferFirstRefresh?: boolean;
 }
 
 export interface CustomStoryFileSummary {
@@ -79,6 +86,7 @@ export async function getCustomStoryVersion(
 		story.isLive ? storyQueries.getStoryDataCacheByStoryId(story.id) : null,
 		story.isLive ? activityQueries.getLatestStoryRefreshFailure(story.id) : null,
 	]);
+	const queryIds = [...extractCustomStoryQueryIds(files)];
 	return {
 		storyId: story.id,
 		title: story.title,
@@ -92,11 +100,12 @@ export async function getCustomStoryVersion(
 		files: files
 			.filter((file) => isViewableStoryFile(file.path))
 			.map((file) => ({ path: file.path, size: Buffer.byteLength(file.content, 'utf8') })),
-		queryIds: [...extractCustomStoryQueryIds(files)],
+		queryIds,
 		theme,
 		isLive: story.isLive,
 		cachedAt: cache?.cachedAt ?? null,
 		lastRefreshFailure,
+		needsRefresh: usesStoryCache(story) && cache === null && queryIds.length > 0,
 	};
 }
 
@@ -105,17 +114,20 @@ export async function getCustomStoryQueryData(
 	chatId: string,
 	storySlug: string,
 	queryId: string,
+	options: CustomStoryDataOptions = {},
 ): Promise<StoryQueryResult> {
 	const story = await getCustomStory(chatId, storySlug);
 	if (!story.isLive) {
-		const cached = await executeSqlQueries.getLatestSqlQueryDataByIds(chatId, new Set([queryId]));
-		return cached[queryId] ?? runStoryQuery(chatId, queryId);
+		return (await getChatQueryData(chatId, queryId)) ?? runStoryQuery(chatId, queryId);
 	}
 	if (story.cacheSchedule === NO_CACHE_SCHEDULE) {
 		return runStoryQuery(chatId, queryId);
 	}
 
 	const cache = await storyQueries.getStoryDataCacheByStoryId(story.id);
+	if (cache === null && options.deferFirstRefresh) {
+		return (await getChatQueryData(chatId, queryId)) ?? runStoryQuery(chatId, queryId);
+	}
 	const queryData =
 		cache && !isCacheExpired(cache.cachedAt, story.cacheSchedule)
 			? cache.queryData
@@ -126,6 +138,11 @@ export async function getCustomStoryQueryData(
 	return queryData?.[queryId] ?? runStoryQuery(chatId, queryId);
 }
 
+async function getChatQueryData(chatId: string, queryId: string): Promise<StoryQueryResult | undefined> {
+	const stored = await executeSqlQueries.getLatestSqlQueryDataByIds(chatId, new Set([queryId]));
+	return stored[queryId];
+}
+
 async function runStoryQuery(chatId: string, queryId: string): Promise<StoryQueryResult> {
 	try {
 		return await executeLiveQuery(chatId, queryId);
@@ -134,13 +151,20 @@ async function runStoryQuery(chatId: string, queryId: string): Promise<StoryQuer
 	}
 }
 
-export async function getCustomStoryNarratives(chatId: string, storySlug: string): Promise<StoryNarratives> {
+export async function getCustomStoryNarratives(
+	chatId: string,
+	storySlug: string,
+	options: CustomStoryDataOptions = {},
+): Promise<StoryNarratives> {
 	const story = await getCustomStory(chatId, storySlug);
 	if (!story.isLive || !story.isLiveTextDynamic) {
 		return {};
 	}
 
 	const cache = await storyQueries.getStoryDataCacheByStoryId(story.id);
+	if (cache === null && options.deferFirstRefresh) {
+		return {};
+	}
 	const cachedNarratives = cache?.analysisResults ?? {};
 	const isCacheUsable =
 		cache && (story.cacheSchedule === NO_CACHE_SCHEDULE || !isCacheExpired(cache.cachedAt, story.cacheSchedule));
@@ -205,6 +229,10 @@ export async function getCustomStoryFile(
 		throw new CustomStoryFileNotFoundError(path);
 	}
 	return { path: file.path, size: Buffer.byteLength(file.content, 'utf8'), content: file.content };
+}
+
+function usesStoryCache(story: DBStory): boolean {
+	return story.isLive && story.cacheSchedule !== NO_CACHE_SCHEDULE;
 }
 
 async function getCustomStory(chatId: string, storySlug: string): Promise<DBStory> {

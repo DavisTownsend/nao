@@ -175,14 +175,15 @@ export const sharedStoryRoutes = {
 		const { canRefresh } = await getStoryRefreshAccess(shared.storyId, ctx.user.id, ctx.userRole);
 		const canFork = await getStoryForkAccess(shared, ctx.user.id, ctx.userRole);
 
-		const { queryData, cachedAt, code } = await getStoryQueryData(
+		const lastRefreshFailure = await activityQueries.getLatestStoryRefreshFailure(shared.storyId);
+		const { queryData, cachedAt, code, needsRefresh } = await getStoryQueryData(
 			shared.chatId!,
 			shared.slug,
 			shared.code,
 			isLive,
 			cacheSchedule,
+			{ deferRefresh: canRefresh && lastRefreshFailure !== null, deferFirstRefresh: canRefresh },
 		);
-		const lastRefreshFailure = await activityQueries.getLatestStoryRefreshFailure(shared.storyId);
 
 		if (ctx.user.id !== shared.userId) {
 			logAnalyticsEvent({
@@ -206,6 +207,7 @@ export const sharedStoryRoutes = {
 			cacheScheduleDescription,
 			cachedAt,
 			lastRefreshFailure,
+			needsRefresh: needsRefresh ?? false,
 			userRole: ctx.userRole,
 			canRefresh,
 			canFork,
