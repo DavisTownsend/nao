@@ -507,6 +507,7 @@ export function LlmProviderForm({
 							settings,
 						});
 						form.setFieldValue('modelSettings', next.modelSettings);
+						saveProviderIfEditing();
 					}}
 				/>
 			)}

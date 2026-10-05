@@ -154,7 +154,11 @@ describe('progress updates', () => {
 		const readPart = createToolPart({ type: 'tool-read', toolName: 'read' }) as UIMessagePart;
 		const grouped = groupToolCalls([HIDDEN_REASONING, PROGRESS_UPDATE, readPart, readPart]);
 
-		expect(grouped.map((part) => part.type)).toEqual(['tool-group']);
+		expect(grouped).toHaveLength(1);
+		expect(grouped[0]).toMatchObject({
+			type: 'tool-group',
+			parts: [PROGRESS_UPDATE, readPart, readPart],
+		});
 	});
 
 	it('counts a progress update as content, unlike hidden reasoning', () => {

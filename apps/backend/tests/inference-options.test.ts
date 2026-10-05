@@ -172,6 +172,15 @@ describe('Anthropic (live-validated Claude rules)', () => {
 		expect(opus.options).not.toHaveProperty('thinkingDisplay');
 		expect(sonnet.options.thinking).toEqual({ type: 'adaptive', display: 'updates' });
 	});
+
+	it('ignores a stored thinking display on Claude via Vertex, which rejects the field', () => {
+		const { options } = resolve('vertex', 'claude-sonnet-4-6', {
+			reasoningEffort: 'high',
+			thinkingDisplay: 'updates',
+		});
+
+		expect(options.thinking).toEqual({ type: 'adaptive' });
+	});
 });
 
 describe('OpenAI / Azure', () => {

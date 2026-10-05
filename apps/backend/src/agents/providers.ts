@@ -28,6 +28,7 @@ import type {
 	ProviderConfigMap,
 	ProviderSettings,
 	ReasoningEffort,
+	ThinkingDisplay,
 } from '../types/llm';
 import { withProgressUpdates } from './anthropic-progress-updates';
 import {
@@ -509,16 +510,16 @@ function resolveQwenThinking(
 }
 
 /**
- * Direct Anthropic API. The thinking display is the admin's choice, else the model's default
- * (`updates` on models that hide thinking text); models that always think receive it even with
- * effort off.
+ * Anthropic Messages API (direct or Vertex). The thinking display is the admin's choice, else the
+ * model's default (`updates` on models that hide thinking text); models that always think receive
+ * it even with effort off. Only models exposing the control send it, as Vertex rejects the field.
  */
 function resolveAnthropicThinking(
 	capabilities: ModelCapabilities | undefined,
 	effort: ActiveEffort | undefined,
 	settings: ModelInferenceSettings,
 ): ThinkingResult {
-	const display = settings.thinkingDisplay ?? capabilities?.thinkingDisplay;
+	const display = resolveThinkingDisplay(capabilities, settings);
 	const adaptive = { type: 'adaptive', ...(display && { display }) };
 	if (capabilities?.thinking === 'adaptive' && !effort && capabilities.thinkingAlwaysOn) {
 		return { providerOverrides: { thinking: adaptive }, thinkingActive: true };
@@ -530,6 +531,16 @@ function resolveAnthropicThinking(
 		(e) => ({ thinking: adaptive, effort: EFFORT_TO_ANTHROPIC[e] }),
 		(b) => ({ thinking: { type: 'enabled', budgetTokens: b } }),
 	);
+}
+
+function resolveThinkingDisplay(
+	capabilities: ModelCapabilities | undefined,
+	settings: ModelInferenceSettings,
+): ThinkingDisplay | undefined {
+	if (!capabilities?.extraParams?.includes('thinkingDisplay')) {
+		return undefined;
+	}
+	return settings.thinkingDisplay ?? capabilities.thinkingDisplay;
 }
 
 function resolveClaudeThinking(
