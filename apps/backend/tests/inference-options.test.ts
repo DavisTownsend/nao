@@ -10,6 +10,16 @@ const VERTEX_SETTINGS: ProviderSettings = {
 	credentials: { project: 'test-project', location: 'us-east5' },
 };
 const COMPATIBLE_SETTINGS: ProviderSettings = { apiKey: 'test-key', baseURL: 'http://localhost:8000/v1' };
+const BEDROCK_GPT6_IDS = [
+	'global.openai.gpt-6-astra',
+	'global.openai.gpt-6.1-sol',
+	'global.openai.gpt-6-sol',
+	'global.openai.gpt-6-luna',
+	'us.openai.gpt-6-astra',
+	'us.openai.gpt-6.1-sol',
+	'us.openai.gpt-6-sol',
+	'us.openai.gpt-6-luna',
+];
 
 function settingsFor(provider: LlmProvider): ProviderSettings {
 	if (provider === 'vertex') {
@@ -328,6 +338,20 @@ describe('Google Gemini', () => {
 });
 
 describe('Bedrock', () => {
+	it.each(BEDROCK_GPT6_IDS)('reports the 1.05M window for %s', (modelId) => {
+		expect(createProviderModel('bedrock', SETTINGS, modelId).contextWindow).toBe(1_050_000);
+	});
+
+	it.each(BEDROCK_GPT6_IDS)('drops unsupported sampling settings for %s', (modelId) => {
+		const { callSettings } = createProviderModel('bedrock', SETTINGS, modelId, {
+			temperature: 0.5,
+			topP: 0.9,
+			maxOutputTokens: 2000,
+		});
+
+		expect(callSettings).toEqual({ maxOutputTokens: 2000 });
+	});
+
 	it('sends adaptive reasoningConfig for Claude and drops sampling', () => {
 		const { options, callSettings } = resolve('bedrock', 'us.anthropic.claude-sonnet-4-6', {
 			reasoningEffort: 'max',
