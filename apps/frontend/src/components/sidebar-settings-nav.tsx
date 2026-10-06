@@ -8,8 +8,10 @@ import { cn, hideIf } from '@/lib/utils';
 
 interface NavContext {
 	isAdmin: boolean;
+	isCloudBillingEnabled: boolean;
 	isContextAdmin: boolean;
 	isCloud: boolean;
+	isOrgAdmin: boolean;
 	isViewer: boolean;
 }
 
@@ -125,6 +127,12 @@ const settingsNavGroups: NavGroup[] = [
 				exact: true,
 			},
 			{
+				label: 'Plan & Billing',
+				to: '/settings/organization/billing',
+				visible: ({ isCloudBillingEnabled, isOrgAdmin }) => isCloudBillingEnabled && isOrgAdmin,
+				exact: true,
+			},
+			{
 				label: 'Storage',
 				to: '/settings/storage',
 				visible: ({ isViewer, isCloud }) => !isViewer && !isCloud,
@@ -147,6 +155,8 @@ interface SidebarSettingsNavProps {
 	isContextAdmin: boolean;
 	isViewer: boolean;
 	isCloud: boolean;
+	isCloudBillingEnabled: boolean;
+	isOrgAdmin: boolean;
 }
 
 export function SidebarSettingsNav({
@@ -155,6 +165,8 @@ export function SidebarSettingsNav({
 	isContextAdmin,
 	isViewer,
 	isCloud,
+	isCloudBillingEnabled,
+	isOrgAdmin,
 }: SidebarSettingsNavProps) {
 	const navigate = useNavigate();
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -163,8 +175,10 @@ export function SidebarSettingsNav({
 
 	const navContext: NavContext = {
 		isAdmin,
+		isCloudBillingEnabled,
 		isContextAdmin,
 		isCloud,
+		isOrgAdmin,
 		isViewer,
 	};
 	const navGroups = settingsNavGroups

@@ -30,6 +30,7 @@ import type { StoryNarrativeSource } from '../utils/story-kit-narratives';
 import { extractStoryNarratives } from '../utils/story-kit-narratives';
 import { backfillMissingQueryData, extractCustomStoryQueryIds, findMissingQueryIds } from '../utils/story-query-data';
 import { buildToolContext, MAX_OUTPUT_TOKENS } from './agent';
+import { assertProjectCloudBillingAccess } from './cloud-billing-access.service';
 import { resolveExcludedColumnEnforcement } from './excluded-columns.service';
 import { runQueryOnLocalFiles } from './local-query.service';
 import { executeWarehouseSql } from './warehouse-sql.service';
@@ -63,8 +64,16 @@ export interface RefreshResult {
 	narratives: StoryNarratives;
 }
 
-export async function refreshStoryData(chatId: string, slug: string): Promise<RefreshResult> {
-	const { queryData, narratives } = await refreshStoryDataWithContext(chatId, slug);
+interface StoryRefreshOptions {
+	billingAccessVerifiedProjectId?: string;
+}
+
+export async function refreshStoryData(
+	chatId: string,
+	slug: string,
+	options: StoryRefreshOptions = {},
+): Promise<RefreshResult> {
+	const { queryData, narratives } = await refreshStoryDataWithContext(chatId, slug, undefined, options);
 	return { queryData, narratives };
 }
 
@@ -72,6 +81,7 @@ async function refreshStoryDataWithContext(
 	chatId: string,
 	slug: string,
 	existingExecutionContext?: StoryExecutionContext,
+	options: StoryRefreshOptions = {},
 ): Promise<RefreshResult & { code: string }> {
 	const version = await storyQueries.getLatestVersionByChatAndSlug(chatId, slug);
 	if (!version) {
@@ -92,6 +102,7 @@ async function refreshStoryDataWithContext(
 		renderSql: stripSqlFilterBlocks,
 		executionContext: existingExecutionContext,
 		projectId: chat.projectId,
+		billingAccessVerifiedProjectId: options.billingAccessVerifiedProjectId,
 	});
 
 	let refreshedCode = version.code;
@@ -243,6 +254,7 @@ interface StoryQueryExecutionOptions {
 	renderSql: (sqlQuery: string) => string;
 	executionContext?: StoryExecutionContext;
 	projectId?: string;
+	billingAccessVerifiedProjectId?: string;
 }
 
 /**
@@ -255,12 +267,15 @@ export async function executeStoryQueries(
 	sqlQueries: StorySqlQueries,
 	options: StoryQueryExecutionOptions,
 ): Promise<StoryQueryData> {
+	const projectId =
+		options.executionContext?.toolContext.projectId ?? options.projectId ?? (await requireChatProjectId(chatId));
+	if (options.billingAccessVerifiedProjectId !== projectId) {
+		await assertProjectCloudBillingAccess(projectId);
+	}
 	const queries = { ...(await loadUpstreamQueries(chatId, sqlQueries)), ...sqlQueries };
 	const executionContext = Object.values(queries).some((query) => !query.adminMode)
 		? (options.executionContext ?? (await createStoryExecutionContext(chatId)))
 		: null;
-	const projectId =
-		executionContext?.toolContext.projectId ?? options.projectId ?? (await requireChatProjectId(chatId));
 	const running = new Map<string, Promise<QueryResult>>();
 
 	const run = (queryId: string, ancestors: Set<string>): Promise<QueryResult> => {
@@ -279,7 +294,7 @@ export async function executeStoryQueries(
 			throw new Error('Live Story warehouse query has no execution context.');
 		}
 		if (query.databaseId !== LOCAL_DATABASE_ID) {
-			return executeRawSql(sql, { executionContext, databaseId: query.databaseId });
+			return executeBillingValidatedRawSql(sql, { executionContext, databaseId: query.databaseId });
 		}
 
 		const lineage = new Set([...ancestors, queryId]);
@@ -326,6 +341,11 @@ interface RawSqlExecutionOptions {
 }
 
 export async function executeRawSql(sqlQuery: string, options: RawSqlExecutionOptions): Promise<QueryResult> {
+	await assertProjectCloudBillingAccess(options.executionContext.toolContext.projectId);
+	return executeBillingValidatedRawSql(sqlQuery, options);
+}
+
+async function executeBillingValidatedRawSql(sqlQuery: string, options: RawSqlExecutionOptions): Promise<QueryResult> {
 	const context = options.executionContext.toolContext;
 	if (options.databaseId === LOCAL_DATABASE_ID) {
 		return executeLocalSql(sqlQuery, context);
