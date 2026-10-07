@@ -338,6 +338,32 @@ describe('Google Gemini', () => {
 });
 
 describe('Bedrock', () => {
+	describe.each([
+		{ region: 'us-east-1', prefix: 'us' },
+		{ region: 'eu-west-1', prefix: 'eu' },
+		{ region: 'ap-southeast-1', prefix: 'ap' },
+	])('profile routing in $region', ({ region, prefix }) => {
+		const settings: ProviderSettings = { ...SETTINGS, credentials: { region } };
+
+		it.each(BEDROCK_GPT6_IDS)('preserves the explicitly selected profile %s', (modelId) => {
+			const { model } = createProviderModel('bedrock', settings, modelId);
+
+			expect(model.modelId).toBe(modelId);
+		});
+
+		it('continues region-adapting bare Claude IDs', () => {
+			const { model } = createProviderModel('bedrock', settings, 'anthropic.claude-sonnet-4-6');
+
+			expect(model.modelId).toBe(`${prefix}.anthropic.claude-sonnet-4-6`);
+		});
+
+		it('continues region-adapting geographic Claude IDs', () => {
+			const { model } = createProviderModel('bedrock', settings, 'us.anthropic.claude-sonnet-4-6');
+
+			expect(model.modelId).toBe(`${prefix}.anthropic.claude-sonnet-4-6`);
+		});
+	});
+
 	it.each(BEDROCK_GPT6_IDS)('reports the 1.05M window for %s', (modelId) => {
 		expect(createProviderModel('bedrock', SETTINGS, modelId).contextWindow).toBe(1_050_000);
 	});
